@@ -3,7 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import {
   ArrowLeft, ShieldCheck, ShieldX, Minus, RefreshCw,
-  ChevronDown, ChevronUp, FileText, AlertCircle
+  ChevronDown, ChevronUp, FileText, AlertCircle, Zap
 } from 'lucide-react'
 import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
@@ -130,6 +130,7 @@ export default function EventDetail() {
   const navigate = useNavigate()
 
   const freshAnalysisId = location.state?.freshAnalysisId ?? null
+  const inferredAsset   = location.state?.inferredAsset ?? null
 
   const [event, setEvent] = useState(null)
   const [analyses, setAnalyses] = useState([])
@@ -199,6 +200,17 @@ export default function EventDetail() {
         <ArrowLeft size={15} />
         Back
       </button>
+
+      {/* Inferred asset notice */}
+      {inferredAsset && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-fin-accent/10 border border-fin-accent/30 text-sm">
+          <Zap size={13} className="text-fin-accent shrink-0" />
+          <span className="text-fin-muted">
+            Asset code auto-detected from your question:
+          </span>
+          <span className="font-mono font-semibold text-fin-accent">{inferredAsset}</span>
+        </div>
+      )}
 
       {/* Event header */}
       <div className="glass-panel p-5">

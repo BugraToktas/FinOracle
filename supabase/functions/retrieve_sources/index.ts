@@ -2,7 +2,7 @@ import { XMLParser } from "https://esm.sh/fast-xml-parser@4";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Provider = "rss" | "finnhub" | "alphavantage";
+type Provider = "rss" | "finnhub" | "alphavantage" | "yahoo_news";
 
 type RetrieveInput = {
   query: string;
@@ -50,14 +50,32 @@ function uniqByUrl(items: SourceItem[]) {
   });
 }
 
+// Words that are too generic for RSS matching — would match unrelated articles
+const TOKENIZE_SKIP = new Set([
+  // Direction words (already in retrieveQuery for context, not useful for filtering)
+  "rise", "fall", "drop", "surge", "rally", "jump", "decline", "crash", "plunge",
+  // Month names (every article from that month would match)
+  "january", "february", "march", "april", "june", "july",
+  "august", "september", "october", "november", "december",
+  // Other generic terms
+  "stock", "price", "market", "shares", "index",
+]);
+
 function tokenize(q: string) {
-  return q.toLowerCase().split(/\W+/).filter((t) => t && t.length >= 3).slice(0, 12);
+  return q.toLowerCase()
+    .split(/\W+/)
+    .filter((t) => t && t.length >= 3 && !TOKENIZE_SKIP.has(t))
+    .slice(0, 12);
 }
 
 function matchesQuery(item: SourceItem, tokens: string[]) {
   if (tokens.length === 0) return true;
   const hay = `${item.title} ${item.snippet ?? ""}`.toLowerCase();
-  return tokens.some((t) => hay.includes(t));
+  // Whole-word matching: avoids "mart" matching "walmart", "smart", "marketplace"
+  return tokens.some((t) => {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(hay);
+  });
 }
 
 function envList(name: string): string[] {
@@ -75,23 +93,78 @@ function dateDiffDays(articleDate: string | null | undefined, eventDate: string 
   } catch { return 999; }
 }
 
-/** Score higher for date proximity, provider quality, and content richness. */
-function scoreItem(it: SourceItem, eventDate: string | null): number {
+/** Trusted financial domains — scored higher to surface quality sources. */
+const TRUSTED_DOMAINS = new Set([
+  "reuters.com", "ft.com", "wsj.com", "bloomberg.com", "bloomberght.com",
+  "cnbc.com", "marketwatch.com", "investing.com", "tr.investing.com",
+  "coindesk.com", "cointelegraph.com", "seekingalpha.com",
+  "thestreet.com", "barrons.com", "economist.com",
+]);
+
+/**
+ * Score sources by: date proximity + provider quality + domain trust +
+ * question relevance (title match = 2×, snippet match = 1×).
+ */
+function scoreItem(
+  it: SourceItem,
+  eventDate: string | null,
+  questionTokens: string[] = [],
+): number {
   let s = 1.0;
+
+  // Date proximity — strongest signal; window ±7 days is good, ±14 is ok
   const diff = dateDiffDays(it.published_at, eventDate);
-  if (diff <= 1) s += 0.6;
-  else if (diff <= 3) s += 0.4;
-  else if (diff <= 7) s += 0.2;
-  if (it.provider === "alphavantage" || it.provider === "finnhub") s += 0.3;
-  if (it.title) s += 0.1;
+  if (diff <= 1)       s += 1.0;
+  else if (diff <= 3)  s += 0.7;
+  else if (diff <= 7)  s += 0.4;
+  else if (diff <= 14) s += 0.1;
+  // Articles far outside window get a penalty
+  else if (diff > 30)  s -= 0.5;
+
+  // Provider quality — structured/ticker-specific APIs score higher
+  if (it.provider === "alphavantage" || it.provider === "finnhub") s += 0.4;
+  if (it.provider === "yahoo_news") s += 0.35; // asset-specific, high relevance
+
+  // Domain trust
+  if (TRUSTED_DOMAINS.has(it.domain)) s += 0.3;
+
+  // Content richness
+  if (it.title)   s += 0.1;
   if (it.snippet) s += 0.05;
+
+  // ── Question relevance ──────────────────────────────────────────────────
+  // Whole-word matching: title matches count 2×, snippet 1×.
+  // Normalized so a perfect match adds up to +1.0.
+  if (questionTokens.length > 0) {
+    const titleHay   = it.title.toLowerCase();
+    const snippetHay = (it.snippet ?? "").toLowerCase();
+    let hits = 0;
+    for (const tok of questionTokens) {
+      const re = new RegExp(`\\b${tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+      if (re.test(titleHay))        hits += 2;
+      else if (re.test(snippetHay)) hits += 1;
+    }
+    s += (hits / (questionTokens.length * 2)) * 1.0;
+  }
+
   return s;
 }
 
-function rankAndTrim(items: SourceItem[], limit: number, eventDate: string | null) {
-  return uniqByUrl(items)
-    .filter((x) => x.domain)
-    .sort((a, b) => scoreItem(b, eventDate) - scoreItem(a, eventDate))
+function rankAndTrim(
+  items: SourceItem[],
+  limit: number,
+  eventDate: string | null,
+  questionTokens: string[] = [],
+) {
+  const deduped = uniqByUrl(items).filter((x) => x.domain);
+
+  // Hard date cutoff: drop articles more than 21 days from the event, UNLESS
+  // we'd end up with fewer than half the requested limit (keep freshness as fallback).
+  const withinWindow = deduped.filter((x) => dateDiffDays(x.published_at, eventDate) <= 21);
+  const pool = withinWindow.length >= Math.ceil(limit / 2) ? withinWindow : deduped;
+
+  return pool
+    .sort((a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens))
     .slice(0, limit);
 }
 
@@ -313,9 +386,84 @@ async function getFromFinnhub(
 
 // ─── Google News RSS (free, no key, date-ranged via after:/before: operators) ─
 
+/** Known ticker → human-readable name for better Google News matching. */
+const TICKER_NAMES: Record<string, string> = {
+  // Turkish stocks (BIST)
+  THYAO: "Turkish Airlines THY",
+  GARAN: "Garanti Bank Turkey",
+  AKBNK: "Akbank Turkey",
+  ISCTR: "Is Bankasi Turkey",
+  EREGL: "Eregli steel Turkey",
+  BIMAS: "BIM Turkey",
+  TUPRS: "Tupras Turkey",
+  KCHOL: "Koc Holding Turkey",
+  SAHOL: "Sabanci Holding Turkey",
+  SISE: "Sise Cam Turkey",
+  TCELL: "Turkcell Turkey",
+  ASELS: "Aselsan Turkey",
+  FROTO: "Ford Otosan Turkey",
+  TOASO: "Tofas Turkey",
+  KOZAL: "Koza Gold Turkey",
+  PETKM: "Petkim Turkey",
+  // US mega-caps
+  AAPL: "Apple",
+  MSFT: "Microsoft",
+  GOOGL: "Google Alphabet",
+  AMZN: "Amazon",
+  TSLA: "Tesla",
+  NVDA: "Nvidia",
+  META: "Meta Facebook",
+  NFLX: "Netflix",
+  JPM: "JPMorgan Chase",
+  GS: "Goldman Sachs",
+  INTC: "Intel",
+  AMD: "AMD Advanced Micro Devices",
+  DIS: "Disney",
+  V: "Visa",
+  MA: "Mastercard",
+  KO: "Coca-Cola",
+  XOM: "ExxonMobil",
+  JNJ: "Johnson Johnson",
+  // Asian stocks — keyed by Yahoo-format ticker
+  "1810.HK": "Xiaomi",
+  "0700.HK": "Tencent",
+  "9988.HK": "Alibaba",
+  "005930.KS": "Samsung",
+  "7203.T": "Toyota",
+  "6758.T": "Sony",
+  "9984.T": "SoftBank",
+  BABA: "Alibaba",
+  BIDU: "Baidu",
+  TSM: "Taiwan Semiconductor TSMC",
+  // European stocks
+  "MC.PA": "LVMH Louis Vuitton",
+  "OR.PA": "L'Oreal",
+  "VOW3.DE": "Volkswagen",
+  "BMW.DE": "BMW",
+  "MBG.DE": "Mercedes-Benz",
+  "SAP.DE": "SAP",
+  "SIE.DE": "Siemens",
+  "HSBA.L": "HSBC",
+  "SHEL.L": "Shell",
+  "BP.L": "BP",
+  "NESN.SW": "Nestle",
+  "ROG.SW": "Roche",
+  "NOVN.SW": "Novartis",
+  ASML: "ASML",
+  NVS: "Novartis",
+  // Indices
+  BIST100: "Turkish stock market BIST100 Borsa Istanbul",
+  XU100: "Turkish stock market BIST100 Borsa Istanbul",
+  SPX: "S&P 500 US stock market",
+  NDX: "NASDAQ technology",
+  DJI: "Dow Jones",
+  DAX: "Germany DAX index",
+};
+
 /**
- * Builds a keyword summary from the asset code for Google News queries.
- * e.g. "BTC/USD" → "bitcoin BTC", "USDTRY" → "USD TRY forex"
+ * Builds keyword search terms from the asset code + question for Google News.
+ * Always appends meaningful words from the question so the search is never
+ * limited to just a ticker symbol that Google News might not recognise.
  */
 function assetToSearchTerms(assetCode: string, query: string): string {
   const upper = (assetCode ?? "").toUpperCase().replace(/\s/g, "");
@@ -324,24 +472,201 @@ function assetToSearchTerms(assetCode: string, query: string): string {
   const cryptoNames: Record<string, string> = {
     BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "ripple",
     BNB: "binance", ADA: "cardano", DOGE: "dogecoin", AVAX: "avalanche",
+    LINK: "chainlink", DOT: "polkadot", MATIC: "polygon", LTC: "litecoin",
   };
 
+  // Crypto with slash: BTC/USD
   const coinMatch = upper.match(/^([A-Z]{2,10})\/(USD|USDT|EUR|BTC|ETH)$/)?.[1]
     ?? upper.match(/^([A-Z]{2,8})(USDT?|EUR)$/)?.[1];
   if (coinMatch) {
     if (cryptoNames[coinMatch]) terms.push(cryptoNames[coinMatch]);
     terms.push(coinMatch);
-  } else if (upper.length === 6 && CURRENCIES.has(upper.slice(0, 3))) {
-    terms.push(upper.slice(0, 3), upper.slice(3), "forex");
+  } else if (upper.length === 6 && CURRENCIES.has(upper.slice(0, 3)) && CURRENCIES.has(upper.slice(3))) {
+    // Forex flat: USDTRY
+    terms.push(upper.slice(0, 3), upper.slice(3), "forex exchange rate");
+  } else if (upper.match(/^([A-Z]{3})\/([A-Z]{3})$/)) {
+    // Forex with slash: USD/TRY
+    const [base, quote] = upper.split("/");
+    terms.push(base, quote, "forex exchange rate");
+  } else if (TICKER_NAMES[upper]) {
+    // Plain uppercase ticker with a known name (AAPL, THYAO, etc.)
+    terms.push(TICKER_NAMES[upper], upper);
+  } else if (TICKER_NAMES[assetCode]) {
+    // Exchange-suffixed ticker stored with original case (1810.HK, 005930.KS, MC.PA)
+    terms.push(TICKER_NAMES[assetCode], assetCode);
+  } else if (/^[A-Z]{1,6}$/.test(upper)) {
+    // Unknown plain ticker — rely heavily on question words
+    terms.push(upper);
   } else {
+    // Fallback (indices, coded tickers) — just use it and let question words carry
     terms.push(upper);
   }
 
-  // Add the first few meaningful words from the question
-  const qWords = query.toLowerCase().split(/\W+/).filter((t) => t.length >= 4).slice(0, 3);
+  // Include meaningful words from the question — ENGLISH ONLY.
+  // Non-ASCII words (Turkish: "yükseldi", "düştü") or Turkish stop words ("neden",
+  // "mart") would break English Google News searches if included.
+  const stopWords = new Set([
+    // English
+    "what", "when", "where", "which", "that", "this", "with", "from",
+    "have", "will", "been", "were", "they", "them", "their", "would",
+    "could", "should", "does", "about", "because", "during", "early",
+    "stock", "price", "market", "share", "rise", "fell", "fall", "drop",
+    "surge", "jump", "move", "went", "does", "make", "much", "many",
+    // Turkish (ASCII ones that would pollute English search)
+    "neden", "nasil", "hangi", "hisse", "fiyat", "piyasa", "borsa",
+    "ocak", "mart", "nisan", "mayis", "eylul", "ekim", "kasim",
+    "olan", "daha", "veya", "bile", "icin", "gibi", "kadar", "yani",
+    "bunu", "buna", "beni", "seni", "onun", "bize", "size", "onlar",
+  ]);
+  const qWords = query.toLowerCase()
+    .split(/\W+/)
+    // Only pure ASCII letters — filters out Turkish special-char words like "yükseldi"
+    .filter((t) => /^[a-z]+$/.test(t) && t.length >= 4 && !stopWords.has(t))
+    .slice(0, 5);
   terms.push(...qWords);
 
-  return [...new Set(terms)].join(" ");
+  // If we have no useful asset terms at all (e.g. index with no mapping),
+  // fall back to the raw question as the search string
+  const result = [...new Set(terms)].join(" ");
+  return result.trim() || query.slice(0, 120);
+}
+
+/** Turkish BIST tickers — need Turkish-language Google News search too. */
+const TURKISH_TICKERS = new Set([
+  "THYAO","GARAN","AKBNK","ISCTR","EREGL","BIMAS","TUPRS",
+  "KCHOL","SAHOL","SISE","TCELL","ASELS","FROTO","TOASO","KOZAL","PETKM",
+]);
+
+/** Turkish search terms for known BIST tickers. */
+const TURKISH_SEARCH_TERMS: Record<string, string> = {
+  THYAO: "THYAO Türk Hava Yolları hisse",
+  GARAN: "GARAN Garanti Bankası hisse",
+  AKBNK: "AKBNK Akbank hisse",
+  ISCTR: "ISCTR İş Bankası hisse",
+  EREGL: "EREGL Ereğli Demir Çelik hisse",
+  BIMAS: "BIMAS BİM hisse",
+  TUPRS: "TUPRS Tüpraş hisse",
+  KCHOL: "KCHOL Koç Holding hisse",
+  SAHOL: "SAHOL Sabancı Holding hisse",
+  SISE: "SISE Şişe Cam hisse",
+  TCELL: "TCELL Turkcell hisse",
+  ASELS: "ASELS Aselsan hisse",
+  FROTO: "FROTO Ford Otosan hisse",
+  TOASO: "TOASO Tofaş hisse",
+};
+
+// ─── Yahoo Finance News ───────────────────────────────────────────────────────
+
+/**
+ * Convert internal asset code → Yahoo Finance search query.
+ * BIST stocks need the .IS suffix; crypto needs the -USD format.
+ */
+function toYahooQuery(assetCode: string): string {
+  const upper = (assetCode ?? "").toUpperCase().replace(/\s/g, "");
+  // Crypto with slash: BTC/USD → BTC-USD
+  const cryptoMatch = upper.match(/^([A-Z]{2,10})\/(USD|USDT|EUR|BTC|ETH)$/);
+  if (cryptoMatch) return `${cryptoMatch[1]}-${cryptoMatch[2]}`;
+  // BIST stocks
+  if (TURKISH_TICKERS.has(upper)) return `${upper}.IS`;
+  // Plain ticker (US, global)
+  return upper;
+}
+
+async function getFromYahooNews(
+  assetCode: string | null,
+  eventDate: string | null,
+  limit: number,
+  debug: boolean,
+): Promise<{ items: SourceItem[]; debugRows: unknown[] }> {
+  if (!assetCode) return { items: [], debugRows: [] };
+
+  const query = toYahooQuery(assetCode);
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=10&quotesCount=0&enableNavLinks=false&enableFuzzyQuery=false`;
+
+  try {
+    const resp = await fetch(url, {
+      signal: AbortSignal.timeout(6_000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FinOracle/1.0)",
+        "Accept": "application/json",
+      },
+    });
+
+    if (!resp.ok) {
+      return { items: [], debugRows: debug ? [{ provider: "yahoo_news", error: `HTTP ${resp.status}`, query }] : [] };
+    }
+
+    const data = await resp.json() as Record<string, unknown>;
+    const newsArr = (data?.news ?? []) as Record<string, unknown>[];
+
+    const items: SourceItem[] = newsArr
+      .filter((n) => n?.link && n?.title)
+      .map((n): SourceItem => {
+        const link = String(n.link ?? "").trim();
+        const ts = n?.providerPublishTime;
+        const published_at = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+        return {
+          url: link,
+          title: safeStr(String(n.title ?? ""), 240),
+          domain: toDomain(link),
+          published_at,
+          snippet: n?.summary ? safeStr(String(n.summary), 320) : null,
+          provider: "yahoo_news",
+        };
+      })
+      .slice(0, limit);
+
+    return {
+      items,
+      debugRows: debug ? [{ provider: "yahoo_news", count: items.length, query }] : [],
+    };
+  } catch (e) {
+    return {
+      items: [],
+      debugRows: debug ? [{ provider: "yahoo_news", error: String(e).slice(0, 120), query }] : [],
+    };
+  }
+}
+
+function parseGoogleNewsRss(xml: string): SourceItem[] {
+  return parseRss(xml)
+    .filter((it) => it.domain)
+    .map((it) => {
+      // Google News titles end with " - PublisherName"; extract real domain
+      const pubMatch = it.title.match(/\s[-–]\s([^-–]+)$/);
+      if (pubMatch) {
+        const pub = pubMatch[1].trim().toLowerCase().replace(/\s+/g, "");
+        it.domain = pub.includes(".") ? pub : `${pub}.com`;
+        it.title = it.title.replace(/\s[-–]\s[^-–]+$/, "").trim();
+      }
+      return it;
+    });
+}
+
+function buildDateSuffix(eventDate: string, windowDays = 4): string {
+  const base = new Date(eventDate);
+  const from = new Date(base); from.setDate(from.getDate() - windowDays);
+  const to   = new Date(base); to.setDate(to.getDate() + windowDays);
+  const fmt  = (d: Date) => d.toISOString().split("T")[0];
+  return `+after:${fmt(from)}+before:${fmt(to)}`;
+}
+
+async function fetchGoogleNewsRss(
+  terms: string,
+  dateSuffix: string,
+  locale: string, // e.g. "en-US&gl=US&ceid=US:en" or "tr-TR&gl=TR&ceid=TR:tr"
+  timeout = 8_000,
+): Promise<SourceItem[]> {
+  const q = encodeURIComponent(terms) + dateSuffix;
+  const url = `https://news.google.com/rss/search?q=${q}&hl=${locale}`;
+  try {
+    const resp = await fetch(url, {
+      signal: AbortSignal.timeout(timeout),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; FinOracle/1.0)" },
+    });
+    if (!resp.ok) return [];
+    return parseGoogleNewsRss(await resp.text());
+  } catch { return []; }
 }
 
 async function getFromGoogleNews(
@@ -351,60 +676,60 @@ async function getFromGoogleNews(
   limit: number,
   debug: boolean,
 ): Promise<{ items: SourceItem[]; debugRows: unknown[] }> {
+  const upper = (assetCode ?? "").toUpperCase().replace(/\s/g, "");
   const searchTerms = assetCode ? assetToSearchTerms(assetCode, query) : query;
+  const dateSuffix = eventDate ? buildDateSuffix(eventDate) : "";
+  const isTurkish = TURKISH_TICKERS.has(upper);
 
-  let q = encodeURIComponent(searchTerms);
+  // Build parallel fetch list: English always, Turkish additionally for BIST stocks
+  const fetches: Promise<SourceItem[]>[] = [
+    fetchGoogleNewsRss(searchTerms, dateSuffix, "en-US&gl=US&ceid=US:en"),
+  ];
 
-  // Add date range if event date is available
-  if (eventDate) {
-    const base = new Date(eventDate);
-    const from = new Date(base); from.setDate(from.getDate() - 4);
-    const to   = new Date(base); to.setDate(to.getDate() + 4);
-    const fmt  = (d: Date) => d.toISOString().split("T")[0]; // YYYY-MM-DD
-    q += `+after:${fmt(from)}+before:${fmt(to)}`;
+  if (isTurkish) {
+    const trTerms = TURKISH_SEARCH_TERMS[upper] ?? `${upper} hisse`;
+    fetches.push(fetchGoogleNewsRss(trTerms, dateSuffix, "tr-TR&gl=TR&ceid=TR:tr"));
   }
 
-  const url = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
+  const results = await Promise.all(fetches);
+  const combined = results.flat().slice(0, limit * 4);
 
-  try {
-    const resp = await fetch(url, {
-      signal: AbortSignal.timeout(8_000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; FinOracle/1.0)" },
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const xml = await resp.text();
-    // Google News RSS URLs are redirect links (news.google.com/rss/articles/...).
-    // Extract the real publisher from the title suffix " - PublisherName".
-    const parsed = parseRss(xml)
-      .filter((it) => it.domain)
-      .map((it) => {
-        const pubMatch = it.title.match(/\s[-–]\s([^-–]+)$/);
-        if (pubMatch) {
-          const pub = pubMatch[1].trim().toLowerCase().replace(/\s+/g, "");
-          it.domain = pub.includes(".") ? pub : `${pub}.com`;
-          it.title = it.title.replace(/\s[-–]\s[^-–]+$/, "").trim();
-        }
-        return it;
-      });
-
-    return {
-      items: parsed.slice(0, limit * 3),
-      debugRows: debug ? [{ provider: "google_news", count: parsed.length, terms: searchTerms }] : [],
-    };
-  } catch (e) {
-    return { items: [], debugRows: debug ? [{ provider: "google_news", error: String(e) }] : [] };
-  }
+  return {
+    items: combined,
+    debugRows: debug ? [{
+      provider: "google_news",
+      count: combined.length,
+      terms: searchTerms,
+      turkish_search: isTurkish,
+    }] : [],
+  };
 }
 
 // ─── RSS ──────────────────────────────────────────────────────────────────────
 
 function getDefaultRssFeeds() {
   return [
-    "http://feeds.marketwatch.com/marketwatch/topstories/",
-    "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+    // ── Global financial ─────────────────────────────────────────────────
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",       // CNBC Markets
+    "https://www.cnbc.com/id/10001147/device/rss/rss.html",       // CNBC Top News
+    "https://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://seekingalpha.com/market_currents.xml",
+    "https://www.benzinga.com/feed",
+    // ── Crypto ───────────────────────────────────────────────────────────
     "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml",
+    "https://cointelegraph.com/rss",
+    "https://decrypt.co/feed",
+    // ── Asia-Pacific (for HK, KR, JP stocks) ─────────────────────────────
+    "https://www.scmp.com/rss/2/feed",                            // South China Morning Post — Business
+    "https://asia.nikkei.com/rss/feed/nar",                       // Nikkei Asia
+    "https://www.thestreet.com/.rss/full",                        // TheStreet (tech/global)
+    // ── Turkish financial news ───────────────────────────────────────────
+    "https://www.bloomberght.com/rss",
+    "https://tr.investing.com/rss/news_1.rss",
+    "https://tr.investing.com/rss/news_25.rss",
+    // ── Broad international ──────────────────────────────────────────────
     "https://www.investing.com/rss/news_1.rss",
-    "https://feeds.feedburner.com/zerohedge/feed",
+    "https://www.investing.com/rss/news_25.rss",
   ];
 }
 
@@ -528,23 +853,30 @@ Deno.serve(async (req) => {
     const avTicker     = assetCode ? toAlphaVantageTicker(assetCode) : null;
     const finnhubSym   = assetCode ? toFinnhubSymbol(assetCode) : null;
 
+    // Primary sources: Google News (date-filtered) + Yahoo News (ticker-specific) each get 10.
+    // Structured APIs (AV, Finnhub) and RSS backfill remaining slots.
+    const GN_LIMIT  = 10;
+    const YH_LIMIT  = 10;
+    const RSS_LIMIT = 5;  // RSS as safety net only
+
     // Run all providers in parallel
-    const [avOut, fhOut, gnOut, rssOut] = await Promise.all([
+    const [avOut, fhOut, yhOut, gnOut, rssOut] = await Promise.all([
       getFromAlphaVantage(avTicker, eventDate, limit, debug),
       finnhubSym
         ? getFromFinnhub(finnhubSym, eventDate, limit, debug)
         : Promise.resolve({ items: [] as SourceItem[], debugRows: [] }),
-      getFromGoogleNews(assetCode, body.query, eventDate, limit, debug),
-      getFromRSS(tokens, limit, noFilter, debug),
+      getFromYahooNews(assetCode, eventDate, YH_LIMIT, debug),
+      getFromGoogleNews(assetCode, body.query, eventDate, GN_LIMIT, debug),
+      getFromRSS(tokens, RSS_LIMIT, noFilter, debug),
     ]);
 
-    const allItems = [...avOut.items, ...fhOut.items, ...gnOut.items, ...rssOut.items];
-    let finalItems = rankAndTrim(allItems, limit, eventDate);
+    const allItems = [...avOut.items, ...fhOut.items, ...yhOut.items, ...gnOut.items, ...rssOut.items];
+    let finalItems = rankAndTrim(allItems, limit, eventDate, tokens);
 
     // Fallback: if structured APIs returned nothing and RSS matched too few, retry without filter
     if (finalItems.length < Math.ceil(limit / 2) && !noFilter) {
       const fallback = await getFromRSS(tokens, limit + 6, true, false);
-      finalItems = rankAndTrim([...allItems, ...fallback.items], limit, eventDate);
+      finalItems = rankAndTrim([...allItems, ...fallback.items], limit, eventDate, tokens);
     }
 
     return json(200, {
@@ -552,6 +884,7 @@ Deno.serve(async (req) => {
       counts: {
         alphavantage: avOut.items.length,
         finnhub: fhOut.items.length,
+        yahoo_news: yhOut.items.length,
         google_news: gnOut.items.length,
         rss: rssOut.items.length,
         final: finalItems.length,
@@ -560,8 +893,9 @@ Deno.serve(async (req) => {
       debug: debug ? {
         ticker_av: avTicker,
         symbol_finnhub: finnhubSym,
+        yahoo_query: assetCode ? toYahooQuery(assetCode) : null,
         event_date: eventDate,
-        rows: [...avOut.debugRows, ...fhOut.debugRows, ...gnOut.debugRows, ...rssOut.debugRows],
+        rows: [...avOut.debugRows, ...fhOut.debugRows, ...yhOut.debugRows, ...gnOut.debugRows, ...rssOut.debugRows],
       } : undefined,
     });
   } catch (err) {

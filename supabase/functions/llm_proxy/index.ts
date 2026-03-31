@@ -5,7 +5,7 @@
  * For task="recheck" also returns: verdict ("correct" | "partial" | "wrong")
  */
 
-type Task = "ask" | "analyze" | "recheck";
+type Task = "ask" | "analyze" | "recheck" | "extract_asset";
 type Verdict = "correct" | "partial" | "wrong";
 
 function json(status: number, body: unknown) {
@@ -28,26 +28,59 @@ function safeStr(x: unknown, maxLen = 2000) {
 function buildPrompt(task: Task, input: unknown) {
   const inp = input as Record<string, unknown>;
 
+  // ── extract_asset ───────────────────────────────────────────────────────
+  if (task === "extract_asset") {
+    return `You are a financial asset identifier. Extract the primary financial asset from the question.
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "asset_code": string | null,
+  "name": string,
+  "confidence": number
+}
+Format rules:
+- Stocks: use exchange ticker (THYAO, AAPL, NVDA)
+- Turkish stocks: BIST ticker without exchange suffix (THYAO not THYAO.IS)
+- Crypto: SYMBOL/USD format (BTC/USD, ETH/USD, SOL/USD)
+- Forex: BASE/QUOTE format (USD/TRY, EUR/USD, GBP/USD)
+- Commodities: XAU/USD (gold), XAG/USD (silver), USOIL (crude oil)
+- Indices: SPX, NDX, DJI, DAX, BIST100
+- If no clear financial asset, return null with confidence 0.
+
+Question: "${safeStr(inp?.question as string, 500)}"`;
+  }
+
+  // ── ask / analyze ───────────────────────────────────────────────────────
   if (task === "ask" || task === "analyze") {
+    const event = inp?.event as Record<string, unknown> ?? {};
+    const sources = inp?.source_priors as unknown[] ?? [];
+    const eventDate = event?.event_date ?? "unknown date";
+    const assetCode = event?.asset_code ?? "the asset";
+    const direction = event?.direction ?? "moved";
+
     return `Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
 {
   "summary": string,
   "confidence": number,
   "sources": [{ "organization": string, "author_name": string }]
 }
-Rules:
-- Do NOT invent URLs.
-- If uncertain, say so in summary and reduce confidence.
-- Keep summary 1-3 short sentences.
 
-Task: Explain the most likely drivers of this market move.
-User question: ${safeStr(inp?.question, 500)}
-Event: ${JSON.stringify(inp?.event ?? {})}
-Source context: ${JSON.stringify((inp?.source_priors ?? []))}
+Rules:
+- ONLY use sources that are dated within ±7 days of the event date (${eventDate}).
+- ONLY cite sources that directly mention ${assetCode} or clearly related market factors.
+- Do NOT invent facts or URLs. If sources are irrelevant or too old/new, say so and reduce confidence.
+- Set confidence ≥0.6 only if you have at least 2 directly relevant sources.
+- Keep summary 2-4 sentences. Focus on specific causal factors, not general market commentary.
+
+Task: Explain why ${assetCode} moved ${direction} on ${eventDate}.
+User question: ${safeStr(inp?.question as string, 500)}
+Event: ${JSON.stringify(event)}
+
+Sources (use ONLY those relevant to the event date and asset):
+${JSON.stringify(sources)}
 `;
   }
 
-  // recheck — adds verdict to output schema so verify_analysis doesn't need bag-of-words
+  // ── recheck ─────────────────────────────────────────────────────────────
   return `Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
 {
   "summary": string,
@@ -62,7 +95,7 @@ verdict rules:
 
 Task: Re-evaluate whether the initial analysis was accurate.
 Event: ${JSON.stringify(inp?.event ?? {})}
-Initial summary: ${safeStr(inp?.initial_summary, 1500)}
+Initial summary: ${safeStr(inp?.initial_summary as string, 1500)}
 `;
 }
 
@@ -169,8 +202,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const task = body?.task as Task;
 
-    if (!task || !["ask", "analyze", "recheck"].includes(task)) {
-      return json(400, { ok: false, error: "task is required: ask | analyze | recheck" });
+    if (!task || !["ask", "analyze", "recheck", "extract_asset"].includes(task)) {
+      return json(400, { ok: false, error: "task is required: ask | analyze | recheck | extract_asset" });
     }
 
     const provider = (Deno.env.get("LLM_PROVIDER") ?? "gemini").toLowerCase();
@@ -188,8 +221,24 @@ Deno.serve(async (req) => {
       text = JSON.stringify({ summary: "Dummy summary", confidence: 0.6, sources: [], verdict: "correct" });
     }
 
-    const norm = normalizeLLM(task, text, raw_response);
+    // extract_asset uses its own light normalizer
+    if (task === "extract_asset") {
+      try {
+        const obj = JSON.parse(stripCodeFence(text)) as Record<string, unknown>;
+        return json(200, {
+          ok: true,
+          provider,
+          task,
+          asset_code: obj?.asset_code ?? null,
+          name: obj?.name ?? "",
+          confidence: clamp01(Number(obj?.confidence ?? 0)),
+        });
+      } catch {
+        return json(200, { ok: true, provider, task, asset_code: null, name: "", confidence: 0 });
+      }
+    }
 
+    const norm = normalizeLLM(task, text, raw_response);
     return json(200, { ok: true, provider, task, ...norm });
   } catch (err) {
     console.error("[llm_proxy] unhandled error:", String(err));

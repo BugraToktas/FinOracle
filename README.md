@@ -1,6 +1,6 @@
 # FinOracle
 
-AI-powered financial market event analysis platform. Submit a market event (e.g. "BTC surged 5% on March 20") and FinOracle automatically retrieves date-filtered news sources, generates an LLM-based analysis, and periodically re-verifies its own conclusions against new evidence.
+AI-powered financial market event analysis platform. Submit a market event and FinOracle automatically retrieves date-filtered news from multiple sources, generates an LLM analysis, and periodically re-verifies its conclusions.
 
 ---
 
@@ -10,27 +10,37 @@ AI-powered financial market event analysis platform. Submit a market event (e.g.
 Frontend (React + Vite + Tailwind v4)
         │
         ▼
-Supabase (PostgreSQL + Edge Functions)
+Supabase Edge Functions (Deno)
         │
-        ├── ask_finoracle       → main analysis pipeline
-        │       ├── retrieve_sources  → Google News RSS + Alpha Vantage + Finnhub + RSS feeds
-        │       └── llm_proxy         → Gemini 2.5 Flash
+        ├── ask_finoracle          ← main pipeline
+        │       ├── 1. Infer asset code (3-tier)
+        │       ├── 2. retrieve_sources (parallel)
+        │       │       ├── Google News RSS  (date-filtered, 10 articles)
+        │       │       ├── Yahoo Finance News (ticker-specific, 10 articles)
+        │       │       ├── Alpha Vantage NEWS_SENTIMENT (optional)
+        │       │       ├── Finnhub company-news (optional)
+        │       │       └── RSS feeds (safety net, 5 articles)
+        │       ├── 3. llm_proxy → Gemini (analysis)
+        │       └── 4. Save to DB (market_events, analysis_results, source_documents)
         │
-        ├── verify_analysis     → re-checks a past analysis, updates source reputation
-        └── run_verification_queue → batch-processes all analyses due for recheck
+        ├── verify_analysis        ← re-checks a single analysis, updates reputation
+        ├── run_verification_queue ← batch re-check (pg_cron: 06:00 & 18:00 UTC)
+        └── llm_proxy              ← Gemini wrapper (ask / recheck / extract_asset)
 ```
 
-### Database tables
+---
+
+## Database Tables
 
 | Table | Purpose |
 |---|---|
 | `market_events` | Asset + date + direction + magnitude |
-| `analysis_results` | LLM summary, confidence, status, verify_after |
-| `source_documents` | Deduplicated news articles (url, domain, snippet) |
+| `analysis_results` | LLM summary, confidence score, status, verify_after |
+| `source_documents` | Deduplicated news articles (url, domain, snippet, embedding) |
 | `analysis_document_links` | Many-to-many: analysis ↔ source documents |
 | `news_sources` | Publisher reputation scores (Laplace-smoothed) |
 | `analysis_source_links` | LLM-cited sources linked to an analysis |
-| `revalidations` | Re-check history with verdict (correct/partial/wrong) |
+| `revalidations` | Re-check history with verdict (correct / partial / wrong) |
 
 ---
 
@@ -40,9 +50,55 @@ Supabase (PostgreSQL + Edge Functions)
 |---|---|
 | Frontend | React 19, Vite 8, Tailwind CSS v4, react-router-dom v7, recharts |
 | Backend | Supabase Edge Functions (Deno runtime) |
-| Database | Supabase PostgreSQL (pgvector enabled) |
+| Database | Supabase PostgreSQL 15 (pgvector enabled) |
 | LLM | Google Gemini 2.5 Flash via Generative Language API |
-| News sources | Google News RSS (date-filtered), Alpha Vantage, Finnhub, static RSS feeds |
+| News | Google News RSS, Yahoo Finance News API, Alpha Vantage, Finnhub, RSS |
+
+---
+
+## Asset Code Inference (3-Tier)
+
+When `asset_code` is not provided, FinOracle infers it automatically:
+
+| Tier | Method | Coverage |
+|---|---|---|
+| 1 | Regex pattern matching | ~90% — crypto, major US/TR/EU stocks, forex |
+| 2 | Yahoo Finance symbol search API | Any globally listed ticker |
+| 3 | Gemini LLM extraction | Free-form descriptions in any language |
+
+The response includes `inferred_asset_code` and `infer_method` when inference is used.
+
+**Example — no `asset_code` needed:**
+```json
+{
+  "event_date": "2026-03-20",
+  "direction": "up",
+  "question": "Bitcoin neden 20 Mart 2026'da yükseldi?"
+}
+```
+→ `"inferred_asset_code": "BTC/USD"`, `"infer_method": "pattern"`
+
+---
+
+## News Source Pipeline
+
+Sources are retrieved from 5 providers in parallel, then ranked and trimmed to the top 20:
+
+| Provider | Articles | Strength |
+|---|---|---|
+| **Google News RSS** | 10 | Date-filtered (`after:/before:`), best for English-covered assets |
+| **Yahoo Finance News** | 10 | Ticker-specific, works for global stocks (HK, KR, JP, EU) |
+| **Alpha Vantage** | up to 10 | Date-range filtered, 25 req/day free tier |
+| **Finnhub** | up to 10 | US/global stocks, date-range filtered |
+| **RSS feeds** | 5 | Safety net (CNBC, MarketWatch, CoinDesk, SCMP, Nikkei, BloombergHT, etc.) |
+
+**Scoring factors** (higher = ranked first):
+- Date proximity to event (≤1 day: +1.0, ≤3 days: +0.7, >21 days: excluded)
+- Ticker-specific provider (Alpha Vantage, Finnhub, Yahoo: +0.35–0.4)
+- Trusted domain (Reuters, Bloomberg, CoinDesk, etc.: +0.3)
+- Whole-word question token match in title (+2×) or snippet (+1×)
+
+**Known limitation:** Asian stocks (HK, KR, JP) listed outside major English-language news networks may return low-confidence results due to limited English coverage in free sources.
 
 ---
 
@@ -76,7 +132,7 @@ Both values are in **Supabase Dashboard → Settings → API**.
 
 ### 3. Run database migrations
 
-In **Supabase Dashboard → SQL Editor**, run each file in `supabase/migrations/` in chronological order:
+In **Supabase Dashboard → SQL Editor**, run each file in `supabase/migrations/` in order:
 
 1. `20260316_add_unique_constraints.sql`
 2. `20260316_drop_redundant_columns.sql`
@@ -84,12 +140,12 @@ In **Supabase Dashboard → SQL Editor**, run each file in `supabase/migrations/
 4. `20260316_atomic_reputation_update.sql`
 5. `20260327_rls_public_read.sql`
 6. `20260327_pgvector_embeddings.sql`
-7. `20260327_pg_cron_verification.sql` *(requires pg_cron extension — enable it in Dashboard → Database → Extensions first)*
-8. `supabase/migrations/pg_cron_credentials.local.sql` — **gitignored**, fill in your own values and run manually
+7. `20260327_pg_cron_verification.sql` *(enable pg_cron extension first: Dashboard → Database → Extensions)*
+8. `pg_cron_credentials.local.sql` — **gitignored**, fill in your own `service_role_key` and run manually
 
 ### 4. Set Edge Function secrets
 
-In **Supabase Dashboard → Settings → Edge Function Secrets**:
+**Supabase Dashboard → Settings → Edge Function Secrets:**
 
 | Secret | Required | Description |
 |---|---|---|
@@ -101,11 +157,12 @@ In **Supabase Dashboard → Settings → Edge Function Secrets**:
 ### 5. Deploy Edge Functions
 
 ```bash
-supabase functions deploy ask_finoracle
-supabase functions deploy retrieve_sources
-supabase functions deploy llm_proxy
-supabase functions deploy verify_analysis
-supabase functions deploy run_verification_queue
+npx supabase login
+npx supabase functions deploy ask_finoracle --no-verify-jwt
+npx supabase functions deploy retrieve_sources --no-verify-jwt
+npx supabase functions deploy llm_proxy --no-verify-jwt
+npx supabase functions deploy verify_analysis --no-verify-jwt
+npx supabase functions deploy run_verification_queue --no-verify-jwt
 ```
 
 ### 6. Run the frontend
@@ -117,24 +174,65 @@ npm run dev
 
 ---
 
-## Edge Functions
+## Testing the API
 
-| Function | Trigger | Description |
-|---|---|---|
-| `ask_finoracle` | Frontend / manual | Full pipeline: retrieve → analyse → save |
-| `retrieve_sources` | Called by ask_finoracle | Fetches date-filtered news from multiple providers |
-| `llm_proxy` | Called by ask_finoracle / verify_analysis | Gemini API wrapper with JSON normalisation |
-| `verify_analysis` | Frontend / queue | Re-checks a single analysis, updates reputation |
-| `run_verification_queue` | pg_cron (06:00 & 18:00 UTC) | Batch-verifies all analyses past their `verify_after` date |
+All Edge Functions accept POST requests. Test via Supabase Dashboard → Edge Functions → [function] → Test.
+
+### Full analysis (ask_finoracle)
+
+```json
+{
+  "asset_code": "BTC/USD",
+  "event_date": "2026-03-20",
+  "direction": "up",
+  "question": "Why did Bitcoin surge on March 20 2026?"
+}
+```
+
+`asset_code` is optional — inferred from the question if omitted.
+
+### Re-verify an analysis (verify_analysis)
+
+```json
+{ "analysis_id": "your-analysis-uuid" }
+```
+
+### Debug source retrieval (retrieve_sources)
+
+```json
+{
+  "query": "Bitcoin surge rally",
+  "asset_code": "BTC/USD",
+  "event": { "event_date": "2026-03-20", "asset_code": "BTC/USD" },
+  "limit": 20,
+  "debug": true
+}
+```
 
 ---
 
-## News Source Priority
+## Expected Confidence by Asset Type
 
-1. **Alpha Vantage NEWS_SENTIMENT** — ticker + date-range filtered (25 req/day free)
-2. **Google News RSS** — free, no key, `after:` / `before:` date operators
-3. **Finnhub company-news** — stock tickers only, date-range filtered
-4. **Static RSS feeds** — CoinDesk, CNBC, MarketWatch, Investing.com (always-on fallback)
+| Asset Type | Expected Confidence | Notes |
+|---|---|---|
+| Major crypto (BTC, ETH, SOL) | 0.7 – 0.9 | Excellent English coverage |
+| Major US stocks (AAPL, TSLA, NVDA) | 0.7 – 0.9 | Excellent English coverage |
+| Forex (USD/TRY, EUR/USD) | 0.6 – 0.9 | Good via Google News |
+| Turkish stocks (THYAO, GARAN) | 0.3 – 0.7 | Turkish + English Google News |
+| Asian stocks (1810.HK, 005930.KS) | 0.1 – 0.4 | Limited English free sources |
+| Indices (BIST100, SPX) | 0.5 – 0.8 | Depends on event date |
+
+---
+
+## Edge Functions Reference
+
+| Function | Trigger | Description |
+|---|---|---|
+| `ask_finoracle` | Frontend / API | Full pipeline: infer asset → retrieve → analyse → save |
+| `retrieve_sources` | Called by ask_finoracle | Parallel news retrieval with scoring |
+| `llm_proxy` | Called internally | Gemini wrapper — tasks: `ask`, `recheck`, `extract_asset` |
+| `verify_analysis` | Frontend / queue | Re-checks one analysis, updates source reputation |
+| `run_verification_queue` | pg_cron 06:00 & 18:00 UTC | Batch-processes all due re-checks |
 
 ---
 
@@ -143,7 +241,7 @@ npm run dev
 ```
 finoracle/
 ├── src/
-│   ├── components/         # Layout, Sidebar, StatCard, ConfidenceBar, ...
+│   ├── components/         # Layout, Sidebar, StatCard, ConfidenceBar, SourceList, ...
 │   ├── pages/              # Dashboard, Events, NewEvent, EventDetail, CredibilityBoard
 │   ├── services/           # analysisService.js, eventService.js, credibilityService.js
 │   └── lib/
@@ -156,10 +254,27 @@ finoracle/
 │   │   ├── verify_analysis/
 │   │   └── run_verification_queue/
 │   └── migrations/
-├── .env.local              # gitignored — add your own
+│       ├── *.sql                        # run in order
+│       └── pg_cron_credentials.local.sql  # gitignored — fill manually
+├── .env.local              # gitignored — add your own Supabase keys
+├── .gitignore
 ├── package.json
 └── vite.config.js
 ```
+
+---
+
+## Roadmap
+
+### In Progress
+- pgvector semantic search for source retrieval
+- Frontend improvements (Dashboard charts, EventDetail enrichment)
+
+### Planned
+- Premium news API integration (NewsData.io / GNews) for better Asian stock coverage
+- Multi-language source support (Chinese, Japanese financial news)
+- Alpha Vantage premium tier for higher daily request limits
+- Public deployment (Vercel + Supabase)
 
 ---
 

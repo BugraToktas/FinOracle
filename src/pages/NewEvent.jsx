@@ -1,9 +1,97 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, AlertCircle, ChevronRight } from 'lucide-react'
+import { Sparkles, AlertCircle, ChevronRight, Zap, X } from 'lucide-react'
 import { callAskFinoracle } from '../services/analysisService'
 
-const ASSET_SUGGESTIONS = ['BIST100', 'BTC', 'ETH', 'XAUUSD', 'SPX', 'EURUSD', 'TSLA', 'AAPL']
+// ─── Asset inference (mirrors backend ASSET_PATTERNS) ────────────────────────
+const ASSET_PATTERNS = [
+  [/\b(bitcoin|btc)\b/i,             'BTC/USD'],
+  [/\b(ethereum|eth|ether)\b/i,      'ETH/USD'],
+  [/\b(solana|sol)\b/i,              'SOL/USD'],
+  [/\b(ripple|xrp)\b/i,              'XRP/USD'],
+  [/\b(binance coin|bnb)\b/i,        'BNB/USD'],
+  [/\b(cardano|ada)\b/i,             'ADA/USD'],
+  [/\b(dogecoin|doge)\b/i,           'DOGE/USD'],
+  [/\b(avalanche|avax)\b/i,          'AVAX/USD'],
+  [/\b(chainlink|link)\b/i,          'LINK/USD'],
+  [/\b(polkadot|dot)\b/i,            'DOT/USD'],
+  [/\b(polygon|matic)\b/i,           'MATIC/USD'],
+  [/\b(litecoin|ltc)\b/i,            'LTC/USD'],
+  [/\b(thy|türk hava yollar[ıi]|turkish airlines|thyao)\b/i, 'THYAO'],
+  [/\b(garanti ban|garan)\b/i,       'GARAN'],
+  [/\b(akbank|akbnk)\b/i,            'AKBNK'],
+  [/\b(i[sş] bankas[ıi]|isctr)\b/i,  'ISCTR'],
+  [/\b(ere[gğ]li|eregl)\b/i,         'EREGL'],
+  [/\b(bim market|bimas)\b/i,        'BIMAS'],
+  [/\b(tüpra[sş]|tuprs)\b/i,         'TUPRS'],
+  [/\b(koç holding|kchol)\b/i,       'KCHOL'],
+  [/\b(sabancı|sahol)\b/i,           'SAHOL'],
+  [/\b(şişe cam|sise)\b/i,           'SISE'],
+  [/\b(turkcell|tcell)\b/i,          'TCELL'],
+  [/\b(aselsan|asels)\b/i,           'ASELS'],
+  [/\b(ford otosan|froto)\b/i,       'FROTO'],
+  [/\b(tofaş|toaso)\b/i,             'TOASO'],
+  [/\b(apple|aapl)\b/i,              'AAPL'],
+  [/\b(microsoft|msft)\b/i,          'MSFT'],
+  [/\b(google|alphabet|googl)\b/i,   'GOOGL'],
+  [/\b(amazon|amzn)\b/i,             'AMZN'],
+  [/\b(tesla|tsla)\b/i,              'TSLA'],
+  [/\b(nvidia|nvda)\b/i,             'NVDA'],
+  [/\b(meta|facebook)\b/i,           'META'],
+  [/\b(netflix|nflx)\b/i,            'NFLX'],
+  [/\b(jpmorgan|jpm)\b/i,            'JPM'],
+  [/\b(goldman sachs|gs)\b/i,        'GS'],
+  [/\b(intel|intc)\b/i,              'INTC'],
+  [/\b(amd|advanced micro)\b/i,      'AMD'],
+  [/\b(disney)\b/i,                  'DIS'],
+  [/\b(visa)\b/i,                    'V'],
+  [/\b(mastercard)\b/i,              'MA'],
+  [/\b(coca.?cola|coke)\b/i,         'KO'],
+  // ── Asian
+  [/\b(xiaomi)\b/i,                  '1810.HK'],
+  [/\b(samsung)\b/i,                 '005930.KS'],
+  [/\b(toyota)\b/i,                  '7203.T'],
+  [/\b(sony)\b/i,                    '6758.T'],
+  [/\b(alibaba|baba)\b/i,            'BABA'],
+  [/\b(tencent)\b/i,                 '0700.HK'],
+  [/\b(baidu|bidu)\b/i,              'BIDU'],
+  [/\b(tsmc|taiwan semi)\b/i,        'TSM'],
+  // ── European
+  [/\b(lvmh|louis vuitton)\b/i,      'MC.PA'],
+  [/\b(volkswagen|vw)\b/i,           'VOW3.DE'],
+  [/\b(bmw)\b/i,                     'BMW.DE'],
+  [/\b(mercedes)\b/i,                'MBG.DE'],
+  [/\b(sap)\b/i,                     'SAP.DE'],
+  [/\b(hsbc)\b/i,                    'HSBA.L'],
+  [/\b(shell)\b/i,                   'SHEL.L'],
+  [/\b(asml)\b/i,                    'ASML'],
+  [/\b(dolar|dollar|usd[\s/-]?try)\b/i, 'USD/TRY'],
+  [/\b(eur[\s/-]?usd|euro dolar)\b/i,   'EUR/USD'],
+  [/\b(eur[\s/-]?try|euro türk)\b/i,    'EUR/TRY'],
+  [/\b(sterlin|gbp[\s/-]?usd)\b/i,      'GBP/USD'],
+  [/\b(jpy|japon yeni|yen)\b/i,         'USD/JPY'],
+  [/\b(gold|altın|xau)\b/i,             'XAU/USD'],
+  [/\b(silver|gümüş|xag)\b/i,           'XAG/USD'],
+  [/\b(oil|petrol|crude|wti|brent)\b/i, 'USOIL'],
+  [/\b(bist\s*100|xu100|borsa istanbul)\b/i, 'BIST100'],
+  [/\b(s&p\s*500|sp500|spx)\b/i,             'SPX'],
+  [/\b(nasdaq|ndx)\b/i,                      'NDX'],
+  [/\b(dow jones|dji|djia)\b/i,              'DJI'],
+  [/\b(dax)\b/i,                             'DAX'],
+]
+
+function inferAssetCode(text) {
+  for (const [pattern, code] of ASSET_PATTERNS) {
+    if (pattern.test(text)) return code
+  }
+  return null
+}
+
+// ─── Quick-pick asset chips ───────────────────────────────────────────────────
+const ASSET_SUGGESTIONS = [
+  'BTC/USD', 'ETH/USD', 'THYAO', 'BIST100', 'USD/TRY',
+  'SPX', 'XAU/USD', 'TSLA', 'AAPL', 'NVDA',
+]
 
 const QUESTION_TEMPLATES = [
   'What drove this move in {asset}?',
@@ -22,16 +110,35 @@ export default function NewEvent() {
     question: '',
   })
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [detected, setDetected]     = useState(null)   // inferred from question
+  const [dismissed, setDismissed]   = useState(false)  // user dismissed the chip
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+
+  // Live inference whenever question changes
+  useEffect(() => {
+    if (form.asset_code.trim()) {
+      setDetected(null)
+      return
+    }
+    setDismissed(false)
+    const code = inferAssetCode(form.question)
+    setDetected(code)
+  }, [form.question, form.asset_code])
 
   function set(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  function acceptDetected() {
+    set('asset_code', detected)
+    setDetected(null)
+  }
+
   function fillTemplate(tpl) {
+    const assetLabel = form.asset_code || (detected ?? 'the asset')
     const q = tpl
-      .replace('{asset}', form.asset_code || 'the asset')
+      .replace('{asset}', assetLabel)
       .replace('{direction}', form.direction)
       .replace('{date}', form.event_date)
     set('question', q)
@@ -41,21 +148,32 @@ export default function NewEvent() {
     e.preventDefault()
     setError(null)
 
-    if (!form.asset_code.trim()) return setError('Asset code is required.')
+    const resolvedAsset = form.asset_code.trim() || detected
+    if (!resolvedAsset) {
+      return setError('Asset code is required — type it or mention the asset in your question.')
+    }
     if (!form.event_date) return setError('Event date is required.')
     if (!form.question.trim()) return setError('Question is required.')
 
     setLoading(true)
     try {
-      const result = await callAskFinoracle({
-        asset_code: form.asset_code.trim().toUpperCase(),
+      // Send asset_code only when explicitly set; backend infers otherwise
+      const payload = {
         event_date: form.event_date,
         direction: form.direction,
         question: form.question.trim(),
-      })
+      }
+      if (form.asset_code.trim()) {
+        payload.asset_code = form.asset_code.trim().toUpperCase()
+      }
+
+      const result = await callAskFinoracle(payload)
 
       navigate(`/events/${result.event.id}`, {
-        state: { freshAnalysisId: result.analysis_id },
+        state: {
+          freshAnalysisId: result.analysis_id,
+          inferredAsset: result.inferred_asset_code ?? null,
+        },
       })
     } catch (err) {
       setError(err.message)
@@ -63,6 +181,8 @@ export default function NewEvent() {
       setLoading(false)
     }
   }
+
+  const resolvedAsset = form.asset_code.trim() || detected
 
   return (
     <div className="p-6 max-w-2xl">
@@ -78,22 +198,63 @@ export default function NewEvent() {
         <div>
           <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
             Asset Code
+            <span className="ml-1 normal-case font-normal text-fin-muted/60">(optional — inferred from question)</span>
           </label>
-          <input
-            type="text"
-            value={form.asset_code}
-            onChange={(e) => set('asset_code', e.target.value.toUpperCase())}
-            placeholder="e.g. BTC, BIST100, SPX"
-            className="input-field w-full font-mono"
-            required
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={form.asset_code}
+              onChange={(e) => set('asset_code', e.target.value.toUpperCase())}
+              placeholder="e.g. BTC/USD, THYAO, USD/TRY"
+              className="input-field w-full font-mono pr-10"
+            />
+            {form.asset_code && (
+              <button
+                type="button"
+                onClick={() => set('asset_code', '')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fin-muted hover:text-fin-text transition-colors"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Auto-detected badge */}
+          {!form.asset_code && detected && !dismissed && (
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-fin-accent/10 border border-fin-accent/30">
+              <Zap size={13} className="text-fin-accent shrink-0" />
+              <span className="text-xs text-fin-muted flex-1">
+                Detected from question:
+              </span>
+              <button
+                type="button"
+                onClick={acceptDetected}
+                className="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-fin-accent/20 text-fin-accent hover:bg-fin-accent/30 transition-colors"
+              >
+                {detected}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissed(true)}
+                className="text-fin-muted/60 hover:text-fin-muted transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {/* Quick-pick chips */}
           <div className="flex flex-wrap gap-1.5 mt-2">
             {ASSET_SUGGESTIONS.map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => set('asset_code', s)}
-                className="px-2.5 py-0.5 rounded text-xs font-mono bg-fin-border/40 text-fin-muted hover:text-fin-text hover:bg-fin-border transition-colors"
+                className={`px-2.5 py-0.5 rounded text-xs font-mono transition-colors ${
+                  form.asset_code === s
+                    ? 'bg-fin-accent/20 text-fin-accent border border-fin-accent/40'
+                    : 'bg-fin-border/40 text-fin-muted hover:text-fin-text hover:bg-fin-border'
+                }`}
               >
                 {s}
               </button>
@@ -163,7 +324,7 @@ export default function NewEvent() {
           <textarea
             value={form.question}
             onChange={(e) => set('question', e.target.value)}
-            placeholder="What caused this market move?"
+            placeholder="e.g. Why did Turkish Airlines stock rise on March 20 2026?"
             rows={3}
             className="input-field w-full text-sm resize-none"
             required
@@ -178,7 +339,10 @@ export default function NewEvent() {
                   onClick={() => fillTemplate(tpl)}
                   className="text-left text-xs text-fin-muted/70 hover:text-fin-accent transition-colors truncate"
                 >
-                  → {tpl}
+                  → {tpl
+                      .replace('{asset}', resolvedAsset ?? 'the asset')
+                      .replace('{direction}', form.direction)
+                      .replace('{date}', form.event_date)}
                 </button>
               ))}
             </div>
@@ -206,6 +370,11 @@ export default function NewEvent() {
             <>
               <Sparkles size={16} />
               Analyze Event
+              {resolvedAsset && (
+                <span className="ml-1 px-2 py-0.5 rounded font-mono text-xs bg-white/10">
+                  {resolvedAsset}
+                </span>
+              )}
               <ChevronRight size={15} />
             </>
           )}
