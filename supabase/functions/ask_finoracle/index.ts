@@ -387,13 +387,12 @@ Deno.serve(async (req) => {
       upsertedDocs = (docRows ?? []) as Array<{ id: string; url: string }>;
     }
 
-    // 4) LLM analysis
+    // 4) LLM analysis (with one retry on failure)
     step = "llm_proxy_call";
-    const lp = await postFn("llm_proxy", {
+    const llmPayload = {
       task: "ask",
       question: body.question,
       event: { asset_code: body.asset_code, event_date: body.event_date, direction: body.direction },
-      // Send up to 15 sources to LLM — more context = better analysis
       source_priors: retrieved.slice(0, 15).map((d) => ({
         domain: d.domain,
         title: d.title,
@@ -401,10 +400,18 @@ Deno.serve(async (req) => {
         snippet: d.snippet ?? null,
         published_at: d.published_at ?? null
       }))
-    });
+    };
+
+    let lp = await postFn("llm_proxy", llmPayload);
+
+    // Retry once on transient failures (rate limit, timeout)
+    if (!lp.ok && (lp.status === 429 || lp.status === 500 || lp.status === 503)) {
+      await new Promise((r) => setTimeout(r, 2500));
+      lp = await postFn("llm_proxy", llmPayload);
+    }
 
     if (!lp.ok) {
-      return json(500, { step, error: "llm_proxy_failed", status: lp.status, details: lp.text });
+      return json(500, { step, error: "llm_proxy_failed", status: lp.status, details: lp.text.slice(0, 400) });
     }
 
     const lpJson = JSON.parse(lp.text);
@@ -413,6 +420,15 @@ Deno.serve(async (req) => {
       confidence: Number(lpJson.confidence ?? 0.3),
       raw_response: String(lpJson.raw_response ?? lp.text)
     };
+
+    // Resolve which sources the LLM actually used (1-based indices into retrieved)
+    const usedIndices: number[] = Array.isArray(lpJson.used_indices) ? lpJson.used_indices : [];
+    const citedSources = usedIndices.length > 0
+      ? usedIndices
+          .map((i) => retrieved[i - 1])
+          .filter(Boolean)
+          .slice(0, 8)
+      : retrieved.slice(0, 5); // fallback: top-5 if LLM returned no indices
 
     // 5) Insert analysis_results (verified column dropped — use status only)
     step = "insert_analysis_results";
@@ -495,12 +511,12 @@ Deno.serve(async (req) => {
       counts: {
         retrieved: retrieved.length,
         docs_upserted: upsertedDocs.length,
-        llm_sources_linked: llmSources.length
+        llm_sources_linked: citedSources.length
       },
       answer: {
         summary: answer.summary,
         confidence: answer.confidence,
-        sources: retrieved.slice(0, 5).map((d) => ({ domain: d.domain, title: d.title, url: d.url }))
+        sources: citedSources.map((d) => ({ domain: d.domain, title: d.title, url: d.url }))
       }
     });
   } catch (err) {

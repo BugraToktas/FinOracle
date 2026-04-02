@@ -82,3 +82,64 @@ export async function callRunVerificationQueue() {
   if (error) throw new Error(error.message ?? 'run_verification_queue failed')
   return data
 }
+
+/** How many analyses the current user has made today (UTC day). */
+export const DAILY_LIMIT = 5
+
+export async function getTodayAnalysisCount() {
+  const todayUtc = new Date().toISOString().split('T')[0] // YYYY-MM-DD UTC
+  const { count, error } = await supabase
+    .from('analysis_results')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', `${todayUtc}T00:00:00Z`)
+    .lt('created_at',  `${todayUtc}T23:59:59Z`)
+
+  if (error) return 0
+  return count ?? 0
+}
+
+/** Confidence trend for the last N days (for dashboard chart). */
+export async function getConfidenceTrend(days = 30) {
+  const since = new Date(Date.now() - days * 86400_000).toISOString()
+  const { data, error } = await supabase
+    .from('analysis_results')
+    .select('confidence, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: true })
+
+  if (error) return []
+
+  // Group by date, average confidence per day
+  const byDay = {}
+  for (const row of data ?? []) {
+    const day = row.created_at.split('T')[0]
+    if (!byDay[day]) byDay[day] = { sum: 0, count: 0 }
+    byDay[day].sum   += row.confidence ?? 0
+    byDay[day].count += 1
+  }
+
+  return Object.entries(byDay).map(([date, { sum, count }]) => ({
+    date,
+    confidence: Math.round((sum / count) * 100),
+    analyses: count,
+  }))
+}
+
+/** Asset distribution for pie/bar chart. */
+export async function getAssetDistribution() {
+  const { data, error } = await supabase
+    .from('market_events')
+    .select('asset_code')
+
+  if (error) return []
+
+  const counts = {}
+  for (const { asset_code } of data ?? []) {
+    counts[asset_code] = (counts[asset_code] ?? 0) + 1
+  }
+
+  return Object.entries(counts)
+    .map(([asset, count]) => ({ asset, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+}

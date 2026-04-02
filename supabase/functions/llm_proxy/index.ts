@@ -57,26 +57,57 @@ Question: "${safeStr(inp?.question as string, 500)}"`;
     const assetCode = event?.asset_code ?? "the asset";
     const direction = event?.direction ?? "moved";
 
-    return `Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
+    // Sanitize a string for safe inclusion in the prompt
+    function sanitizeForPrompt(v: unknown, maxLen = 280): string {
+      return String(v ?? "")
+        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#\d+;/g, "")
+        .replace(/[\u0000-\u001F\u007F]/g, " ")  // control characters
+        .replace(/\|/g, "-")                       // pipe breaks our column format
+        .replace(/\s+/g, " ").trim()
+        .slice(0, maxLen);
+    }
+
+    // Format sources for readability — numbered list for LLM index references
+    const sourcesBlock = (sources as Record<string, unknown>[]).map((s, i) => {
+      const title   = sanitizeForPrompt(s?.title, 180);
+      const domain  = sanitizeForPrompt(s?.domain, 60);
+      const date    = sanitizeForPrompt(s?.published_at, 40) || "unknown date";
+      const snippet = s?.snippet ? ` - ${sanitizeForPrompt(s.snippet, 200)}` : "";
+      return `[${i + 1}] ${date} | ${domain} | ${title}${snippet}`;
+    }).join("\n");
+
+    return `You are a financial analyst. Explain why ${assetCode} moved ${direction} on ${eventDate}.
+
+Return ONLY valid JSON (no markdown, no backticks):
 {
   "summary": string,
   "confidence": number,
-  "sources": [{ "organization": string, "author_name": string }]
+  "used_indices": number[]
 }
 
-Rules:
-- ONLY use sources that are dated within ±7 days of the event date (${eventDate}).
-- ONLY cite sources that directly mention ${assetCode} or clearly related market factors.
-- Do NOT invent facts or URLs. If sources are irrelevant or too old/new, say so and reduce confidence.
-- Set confidence ≥0.6 only if you have at least 2 directly relevant sources.
-- Keep summary 2-4 sentences. Focus on specific causal factors, not general market commentary.
+Rules for used_indices:
+- List 1-based source numbers (e.g. [2, 5, 9]) of every source you used to write the summary.
+- A source is "used" if it mentions ${assetCode}, related assets, or market conditions that contributed to the move.
+- Sources may be in Turkish or English — treat both equally.
+- Prefer sources within ±7 days of ${eventDate}. Accept sources up to 14 days away if nothing closer exists.
 
-Task: Explain why ${assetCode} moved ${direction} on ${eventDate}.
+Rules for confidence:
+- 0.75–1.0 : 2 or more sources within ±7 days that discuss ${assetCode} or direct market drivers for the period.
+- 0.5–0.74 : 1 relevant source within ±7 days, OR 2+ sources that discuss indirect but clearly related factors.
+- 0.25–0.49: Only contextual sources (macro conditions, sector news) with no direct ${assetCode} mention.
+- 0.0–0.24 : No sources are relevant to the asset or time period at all.
+
+Rules for summary:
+- 2–4 sentences. Focus on the most probable causes based on what the sources say.
+- If sources explain context but not exact causation, describe the context clearly.
+- Do not fabricate facts. Do not say "I cannot determine" unless truly no evidence exists.
+
 User question: ${safeStr(inp?.question as string, 500)}
-Event: ${JSON.stringify(event)}
+Event: asset=${assetCode}, date=${eventDate}, direction=${direction}
 
-Sources (use ONLY those relevant to the event date and asset):
-${JSON.stringify(sources)}
+Sources (numbered):
+${sourcesBlock}
 `;
   }
 
@@ -165,19 +196,27 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
       : "Unable to determine a reliable summary.";
 
     const confidence = clamp01(Number(obj.confidence));
-    const sources = Array.isArray(obj.sources) ? obj.sources : [];
+
+    // New schema: used_indices (1-based) — passed back to ask_finoracle for source resolution
+    const usedIndices: number[] = Array.isArray(obj.used_indices)
+      ? obj.used_indices.filter((i: unknown) => typeof i === "number" && i >= 1).slice(0, 15)
+      : [];
+
+    // Legacy compat: some callers may still check obj.sources
+    const legacySources = Array.isArray(obj.sources) ? obj.sources : [];
 
     const base = {
       summary: safeStr(summary, 1200),
       confidence,
-      sources: sources.slice(0, 10).map((s: any) => ({
+      used_indices: usedIndices,
+      // Keep legacy sources array for recheck compatibility
+      sources: legacySources.slice(0, 10).map((s: any) => ({
         organization: safeStr(s?.organization ?? "", 120),
-        author_name: safeStr(s?.author_name ?? "", 120)
+        author_name:  safeStr(s?.author_name  ?? "", 120)
       })),
       raw_response
     };
 
-    // Include verdict only for recheck task
     if (task === "recheck") {
       const verdict = VALID_VERDICTS.has(obj.verdict) ? obj.verdict as Verdict : null;
       return { ...base, verdict };
@@ -186,9 +225,10 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
     return base;
   } catch {
     const base = {
-      summary: safeStr(text || "No response.", 1200),
-      confidence: 0.25,
-      sources: [] as unknown[],
+      summary:      safeStr(text || "No response.", 1200),
+      confidence:   0.25,
+      used_indices: [] as number[],
+      sources:      [] as unknown[],
       raw_response
     };
     return task === "recheck" ? { ...base, verdict: null } : base;
@@ -218,7 +258,7 @@ Deno.serve(async (req) => {
       text = out.text;
     } else {
       raw_response = JSON.stringify({ provider: "dummy" });
-      text = JSON.stringify({ summary: "Dummy summary", confidence: 0.6, sources: [], verdict: "correct" });
+      text = JSON.stringify({ summary: "Dummy summary", confidence: 0.6, used_indices: [], sources: [], verdict: "correct" });
     }
 
     // extract_asset uses its own light normalizer

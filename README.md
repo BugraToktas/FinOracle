@@ -151,6 +151,7 @@ In **Supabase Dashboard → SQL Editor**, run each file in `supabase/migrations/
 |---|---|---|
 | `GEMINI_API_KEY` | ✅ | Google AI Studio API key |
 | `GEMINI_MODEL` | ✅ | e.g. `gemini-2.5-flash` |
+| `NEWSDATA_API_KEY` | ✅ recommended | 200 req/day free, bilingual (TR+EN) — [newsdata.io](https://newsdata.io/register) |
 | `ALPHAVANTAGE_API_KEY` | optional | 25 req/day free — [alphavantage.co](https://www.alphavantage.co/support/#api-key) |
 | `FINNHUB_API_KEY` | optional | For stock tickers — [finnhub.io](https://finnhub.io/register) |
 

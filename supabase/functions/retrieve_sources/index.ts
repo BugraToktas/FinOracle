@@ -2,7 +2,7 @@ import { XMLParser } from "https://esm.sh/fast-xml-parser@4";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Provider = "rss" | "finnhub" | "alphavantage" | "yahoo_news";
+type Provider = "rss" | "finnhub" | "alphavantage" | "yahoo_news" | "newsdata";
 
 type RetrieveInput = {
   query: string;
@@ -643,11 +643,11 @@ function parseGoogleNewsRss(xml: string): SourceItem[] {
     });
 }
 
-function buildDateSuffix(eventDate: string, windowDays = 4): string {
+function buildDateSuffix(eventDate: string, windowDays = 5): string {
   const base = new Date(eventDate);
   const from = new Date(base); from.setDate(from.getDate() - windowDays);
   const to   = new Date(base); to.setDate(to.getDate() + windowDays);
-  const fmt  = (d: Date) => d.toISOString().split("T")[0];
+  const fmt  = (d: Date) => d.toISOString().split("T")[0]; // YYYY-MM-DD — confirmed working with Google News RSS
   return `+after:${fmt(from)}+before:${fmt(to)}`;
 }
 
@@ -655,17 +655,27 @@ async function fetchGoogleNewsRss(
   terms: string,
   dateSuffix: string,
   locale: string, // e.g. "en-US&gl=US&ceid=US:en" or "tr-TR&gl=TR&ceid=TR:tr"
-  timeout = 8_000,
+  timeout = 9_000,
 ): Promise<SourceItem[]> {
+  // encodeURIComponent encodes the search terms, then the date suffix (+after:YYYY-MM-DD) is
+  // appended as-is — the leading "+" acts as a space separator in Google's query parser.
   const q = encodeURIComponent(terms) + dateSuffix;
   const url = `https://news.google.com/rss/search?q=${q}&hl=${locale}`;
+
   try {
     const resp = await fetch(url, {
       signal: AbortSignal.timeout(timeout),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; FinOracle/1.0)" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
     });
     if (!resp.ok) return [];
-    return parseGoogleNewsRss(await resp.text());
+    const xml = await resp.text();
+    // Google sometimes returns HTML (rate-limit page) instead of XML
+    if (!xml.trim().startsWith("<")) return [];
+    return parseGoogleNewsRss(xml);
   } catch { return []; }
 }
 
@@ -833,6 +843,107 @@ async function getFromRSS(
   return { items: results, debugRows, feedsCount: feeds.length };
 }
 
+// ─── NewsData.io ──────────────────────────────────────────────────────────────
+
+/**
+ * NewsData.io free tier: 200 credits/day, 10 articles per request.
+ * Supports date range, language filter (en + tr), and category filter.
+ * Endpoint: https://newsdata.io/api/1/news
+ */
+async function getFromNewsData(
+  assetCode: string | null,
+  query: string,
+  eventDate: string | null,
+  limit: number,
+  debug: boolean,
+): Promise<{ items: SourceItem[]; debugRows: unknown[] }> {
+  const apiKey = Deno.env.get("NEWSDATA_API_KEY");
+  if (!apiKey) {
+    return { items: [], debugRows: debug ? [{ provider: "newsdata", skipped: "no NEWSDATA_API_KEY" }] : [] };
+  }
+
+  // Trim query to first 3 meaningful words to avoid overly restrictive searches
+  const searchQ = query.trim().split(/\s+/).slice(0, 5).join(" ").slice(0, 200);
+
+  // Detect if Turkish asset for language targeting
+  const isTurkish = assetCode
+    ? new Set(["THYAO","GARAN","AKBNK","ISCTR","EREGL","BIMAS","TUPRS",
+               "KCHOL","SAHOL","SISE","TCELL","ASELS","FROTO","TOASO",
+               "KOZAL","PETKM","USD/TRY","EUR/TRY"]).has(assetCode.toUpperCase())
+    : false;
+
+  // Free plan: use /api/1/news (latest news), no date filter (archive requires paid plan).
+  // We rely on rankAndTrim to filter by date proximity later.
+  const params = new URLSearchParams({
+    apikey:   apiKey,
+    q:        searchQ,
+    language: isTurkish ? "tr,en" : "en",
+    size:     String(Math.min(limit, 10)), // free plan max is 10
+  });
+
+  const url = `https://newsdata.io/api/1/news?${params}`;
+
+  try {
+    // 4s timeout — if unreachable, the outer race will also resolve to empty
+    const resp = await fetch(url, { signal: AbortSignal.timeout(4_000) });
+    const rawText = await resp.text().catch(() => "");
+
+    if (!resp.ok) {
+      console.error("[newsdata] HTTP error:", resp.status, rawText.slice(0, 200));
+      return {
+        items: [],
+        debugRows: debug ? [{ provider: "newsdata", error: `HTTP ${resp.status}: ${rawText.slice(0, 150)}` }] : [],
+      };
+    }
+
+    let data: Record<string, unknown>;
+    try { data = JSON.parse(rawText); } catch {
+      console.error("[newsdata] JSON parse error:", rawText.slice(0, 200));
+      return { items: [], debugRows: debug ? [{ provider: "newsdata", error: "json_parse_failed" }] : [] };
+    }
+
+    if (data?.status !== "success") {
+      const msg = String((data?.results as any)?.message ?? data?.message ?? data?.status ?? "non-success");
+      console.error("[newsdata] API error:", msg);
+      return {
+        items: [],
+        debugRows: debug ? [{ provider: "newsdata", error: msg.slice(0, 150) }] : [],
+      };
+    }
+
+    const results = (data?.results ?? []) as Record<string, unknown>[];
+    const items: SourceItem[] = results
+      .filter((r) => r?.link && r?.title)
+      .map((r): SourceItem => ({
+        url:          String(r.link ?? "").trim(),
+        title:        safeStr(String(r.title ?? ""), 240),
+        domain:       toDomain(String(r.link ?? "")),
+        // NewsData pubDate format: "2026-03-20 14:30:00"
+        published_at: r.pubDate ? String(r.pubDate).replace(" ", "T") + "Z" : null,
+        snippet:      r.description ? safeStr(String(r.description), 320) : null,
+        provider:     "newsdata",
+      }))
+      .slice(0, limit);
+
+    return {
+      items,
+      debugRows: debug ? [{
+        provider: "newsdata",
+        count: items.length,
+        total_results: results.length,
+        query: searchQ,
+        language: isTurkish ? "tr,en" : "en",
+      }] : [],
+    };
+  } catch (e) {
+    console.error("[newsdata] fetch error:", String(e));
+    return {
+      items: [],
+      debugRows: debug ? [{ provider: "newsdata", error: String(e).slice(0, 120) }] : [],
+    };
+  }
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -853,27 +964,48 @@ Deno.serve(async (req) => {
     const avTicker     = assetCode ? toAlphaVantageTicker(assetCode) : null;
     const finnhubSym   = assetCode ? toFinnhubSymbol(assetCode) : null;
 
-    // Primary sources: Google News (date-filtered) + Yahoo News (ticker-specific) each get 10.
-    // Structured APIs (AV, Finnhub) and RSS backfill remaining slots.
+    // Source allocation:
+    //  - Google News (date-filtered, best for known events):  10
+    //  - NewsData.io (date-filtered, bilingual TR+EN):        10
+    //  - Yahoo Finance News (ticker-specific, current):       10
+    //  - Alpha Vantage / Finnhub (when API keys present):     up to 10 each
+    //  - RSS (safety net):                                     5
     const GN_LIMIT  = 10;
+    const ND_LIMIT  = 10;
     const YH_LIMIT  = 10;
-    const RSS_LIMIT = 5;  // RSS as safety net only
+    const RSS_LIMIT = 5;
+
+    // Build NewsData query
+    const ndQuery = body.query.trim();
+
+    // Wrap NewsData in a 4s race — it frequently times out from Supabase infra.
+    // Other providers run without a hard cap so they don't block each other.
+    const emptyNd = { items: [] as SourceItem[], debugRows: debug ? [{ provider: "newsdata", skipped: "race_timeout" }] : [] };
+    const ndPromise = Promise.race([
+      getFromNewsData(assetCode, ndQuery, eventDate, ND_LIMIT, debug),
+      new Promise<typeof emptyNd>((resolve) => setTimeout(() => resolve(emptyNd), 4_000)),
+    ]);
 
     // Run all providers in parallel
-    const [avOut, fhOut, yhOut, gnOut, rssOut] = await Promise.all([
+    const [avOut, fhOut, ndOut, yhOut, gnOut, rssOut] = await Promise.all([
       getFromAlphaVantage(avTicker, eventDate, limit, debug),
       finnhubSym
         ? getFromFinnhub(finnhubSym, eventDate, limit, debug)
         : Promise.resolve({ items: [] as SourceItem[], debugRows: [] }),
+      ndPromise,
       getFromYahooNews(assetCode, eventDate, YH_LIMIT, debug),
       getFromGoogleNews(assetCode, body.query, eventDate, GN_LIMIT, debug),
       getFromRSS(tokens, RSS_LIMIT, noFilter, debug),
     ]);
 
-    const allItems = [...avOut.items, ...fhOut.items, ...yhOut.items, ...gnOut.items, ...rssOut.items];
+    const allItems = [
+      ...avOut.items, ...fhOut.items,
+      ...ndOut.items, ...yhOut.items,
+      ...gnOut.items, ...rssOut.items,
+    ];
     let finalItems = rankAndTrim(allItems, limit, eventDate, tokens);
 
-    // Fallback: if structured APIs returned nothing and RSS matched too few, retry without filter
+    // Fallback: if too few results, retry RSS without filter
     if (finalItems.length < Math.ceil(limit / 2) && !noFilter) {
       const fallback = await getFromRSS(tokens, limit + 6, true, false);
       finalItems = rankAndTrim([...allItems, ...fallback.items], limit, eventDate, tokens);
@@ -883,19 +1015,24 @@ Deno.serve(async (req) => {
       ok: true,
       counts: {
         alphavantage: avOut.items.length,
-        finnhub: fhOut.items.length,
-        yahoo_news: yhOut.items.length,
-        google_news: gnOut.items.length,
-        rss: rssOut.items.length,
-        final: finalItems.length,
+        finnhub:      fhOut.items.length,
+        newsdata:     ndOut.items.length,
+        yahoo_news:   yhOut.items.length,
+        google_news:  gnOut.items.length,
+        rss:          rssOut.items.length,
+        final:        finalItems.length,
       },
       items: finalItems,
       debug: debug ? {
-        ticker_av: avTicker,
+        ticker_av:      avTicker,
         symbol_finnhub: finnhubSym,
-        yahoo_query: assetCode ? toYahooQuery(assetCode) : null,
-        event_date: eventDate,
-        rows: [...avOut.debugRows, ...fhOut.debugRows, ...yhOut.debugRows, ...gnOut.debugRows, ...rssOut.debugRows],
+        yahoo_query:    assetCode ? toYahooQuery(assetCode) : null,
+        event_date:     eventDate,
+        rows: [
+          ...avOut.debugRows, ...fhOut.debugRows,
+          ...ndOut.debugRows, ...yhOut.debugRows,
+          ...gnOut.debugRows, ...rssOut.debugRows,
+        ],
       } : undefined,
     });
   } catch (err) {

@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-fin-dark: #0f172a;
-  --color-fin-card: #1e293b;
+  --color-fin-dark:   #0f172a;
+  --color-fin-bg:     #0b1120;
+  --color-fin-card:   #1e293b;
+  --color-fin-panel:  #1e2030;
   --color-fin-border: #334155;
-  --color-fin-text: #f8fafc;
-  --color-fin-muted: #94a3b8;
-  --color-fin-accent: #3b82f6;
-  --color-fin-up: #10b981;
-  --color-fin-down: #ef4444;
+  --color-fin-text:   #f8fafc;
+  --color-fin-muted:  #94a3b8;
+  --color-fin-accent: #6366f1;
+  --color-fin-up:     #10b981;
+  --color-fin-down:   #ef4444;
 }
 
 @layer base {
@@ -63,7 +65,7 @@
     cursor: not-allowed;
   }
 
-  .input-field {
+  .input-field, .input {
     background-color: color-mix(in srgb, var(--color-fin-dark) 50%, transparent);
     border: 1px solid var(--color-fin-border);
     border-radius: 0.5rem;
@@ -72,11 +74,11 @@
     outline: none;
     transition: box-shadow 0.2s, border-color 0.2s;
   }
-  .input-field:focus {
+  .input-field:focus, .input:focus {
     box-shadow: 0 0 0 2px var(--color-fin-accent);
     border-color: var(--color-fin-accent);
   }
-  .input-field option {
+  .input-field option, .input option {
     background-color: var(--color-fin-card);
     color: var(--color-fin-text);
   }

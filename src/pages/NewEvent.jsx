@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, AlertCircle, ChevronRight, Zap, X } from 'lucide-react'
-import { callAskFinoracle } from '../services/analysisService'
+import { useTranslation } from 'react-i18next'
+import { Sparkles, AlertCircle, ChevronRight, Zap, X, Gauge } from 'lucide-react'
+import { callAskFinoracle, getTodayAnalysisCount, DAILY_LIMIT } from '../services/analysisService'
 
 // ─── Asset inference (mirrors backend ASSET_PATTERNS) ────────────────────────
 const ASSET_PATTERNS = [
@@ -100,6 +101,7 @@ const QUESTION_TEMPLATES = [
 ]
 
 export default function NewEvent() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -110,10 +112,16 @@ export default function NewEvent() {
     question: '',
   })
 
-  const [detected, setDetected]     = useState(null)   // inferred from question
-  const [dismissed, setDismissed]   = useState(false)  // user dismissed the chip
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState(null)
+  const [detected, setDetected]       = useState(null)
+  const [dismissed, setDismissed]     = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState(null)
+  const [todayCount, setTodayCount]   = useState(null)
+
+  // Load today's usage count on mount
+  useEffect(() => {
+    getTodayAnalysisCount().then(setTodayCount)
+  }, [])
 
   // Live inference whenever question changes
   useEffect(() => {
@@ -148,12 +156,17 @@ export default function NewEvent() {
     e.preventDefault()
     setError(null)
 
+    // Daily limit check
+    if (todayCount !== null && todayCount >= DAILY_LIMIT) {
+      return setError(t('newEvent.limitReached', { limit: DAILY_LIMIT }))
+    }
+
     const resolvedAsset = form.asset_code.trim() || detected
     if (!resolvedAsset) {
-      return setError('Asset code is required — type it or mention the asset in your question.')
+      return setError(t('newEvent.errorMissing'))
     }
-    if (!form.event_date) return setError('Event date is required.')
-    if (!form.question.trim()) return setError('Question is required.')
+    if (!form.event_date) return setError(t('newEvent.errorMissing'))
+    if (!form.question.trim()) return setError(t('newEvent.errorMissing'))
 
     setLoading(true)
     try {
@@ -184,13 +197,25 @@ export default function NewEvent() {
 
   const resolvedAsset = form.asset_code.trim() || detected
 
+  const limitReached = todayCount !== null && todayCount >= DAILY_LIMIT
+
   return (
     <div className="p-6 max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-fin-text">New Market Event</h1>
-        <p className="text-sm text-fin-muted mt-0.5">
-          Submit an event to retrieve sources and generate an AI-powered analysis.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-fin-text">{t('newEvent.title')}</h1>
+          <p className="text-sm text-fin-muted mt-0.5">{t('newEvent.subtitle')}</p>
+        </div>
+        {todayCount !== null && (
+          <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border shrink-0 ${
+            limitReached
+              ? 'border-fin-down/40 bg-fin-down/10 text-fin-down'
+              : 'border-fin-border text-fin-muted'
+          }`}>
+            <Gauge size={13} />
+            {t('newEvent.limitInfo', { used: todayCount, limit: DAILY_LIMIT })}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -358,18 +383,18 @@ export default function NewEvent() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="btn-primary w-full flex items-center justify-center gap-2 py-3"
+          disabled={loading || limitReached}
+          className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
             <>
               <Sparkles size={16} className="animate-pulse" />
-              Running AI analysis…
+              {t('newEvent.analysing')}
             </>
           ) : (
             <>
               <Sparkles size={16} />
-              Analyze Event
+              {t('newEvent.submit')}
               {resolvedAsset && (
                 <span className="ml-1 px-2 py-0.5 rounded font-mono text-xs bg-white/10">
                   {resolvedAsset}
