@@ -211,16 +211,20 @@ All Edge Functions accept POST requests. Test via Supabase Dashboard → Edge Fu
 
 ---
 
-## Expected Confidence by Asset Type
+## Supported Markets
 
-| Asset Type | Expected Confidence | Notes |
+FinOracle is focused on **US and Turkish markets**, with full crypto and major forex coverage.
+
+| Asset Type | Examples | Expected Confidence |
 |---|---|---|
-| Major crypto (BTC, ETH, SOL) | 0.7 – 0.9 | Excellent English coverage |
-| Major US stocks (AAPL, TSLA, NVDA) | 0.7 – 0.9 | Excellent English coverage |
-| Forex (USD/TRY, EUR/USD) | 0.6 – 0.9 | Good via Google News |
-| Turkish stocks (THYAO, GARAN) | 0.3 – 0.7 | Turkish + English Google News |
-| Asian stocks (1810.HK, 005930.KS) | 0.1 – 0.4 | Limited English free sources |
-| Indices (BIST100, SPX) | 0.5 – 0.8 | Depends on event date |
+| Crypto | BTC/USD, ETH/USD, SOL/USD | 0.7 – 0.9 |
+| US stocks | AAPL, TSLA, NVDA, MSFT, AMZN | 0.7 – 0.9 |
+| Turkish stocks (BIST) | THYAO, GARAN, AKBNK, EREGL | 0.3 – 0.7 |
+| Forex | USD/TRY, EUR/USD, EUR/TRY | 0.6 – 0.9 |
+| Commodities | XAU/USD (gold), USOIL | 0.6 – 0.8 |
+| Indices | BIST100, SPX, NDX | 0.5 – 0.8 |
+
+> Assets outside US/TR markets (e.g. HK, KR, JP stocks) are out of scope and may return low-confidence results due to limited free English-language coverage.
 
 ---
 
@@ -271,9 +275,8 @@ finoracle/
 - Frontend improvements (Dashboard charts, EventDetail enrichment)
 
 ### Planned
-- Premium news API integration (NewsData.io / GNews) for better Asian stock coverage
-- Multi-language source support (Chinese, Japanese financial news)
-- Alpha Vantage premium tier for higher daily request limits
+- NewsData.io or GNews API integration for higher daily limits
+- Alpha Vantage premium tier (currently 25 req/day)
 - Public deployment (Vercel + Supabase)
 
 ---
