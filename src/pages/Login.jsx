@@ -59,7 +59,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="glass-panel p-8">
+        <div className="glass-panel p-6 md:p-8">
           <h1 className="text-lg font-bold text-fin-text mb-1">
             {mode === 'signin' ? t('auth.welcomeBack') : t('auth.createAccount')}
           </h1>

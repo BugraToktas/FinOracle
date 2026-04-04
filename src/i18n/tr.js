@@ -158,6 +158,7 @@ export default {
     save: 'Kaydet',
     cancel: 'İptal',
     view: 'Görüntüle →',
+    new: 'Yeni',
     score: 'Puan',
   },
 }

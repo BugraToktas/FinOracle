@@ -5,7 +5,7 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { Activity, Clock, BarChart2, Star } from 'lucide-react'
+import { Activity, Clock, BarChart2, Star, ChevronRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
@@ -53,7 +53,7 @@ export default function Dashboard() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-fin-text">{t('dashboard.title')}</h1>
@@ -61,7 +61,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           label={t('dashboard.totalEvents')}
           value={loading ? '—' : (stats?.totalEvents ?? 0)}
@@ -176,56 +176,100 @@ export default function Dashboard() {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-fin-border/60">
-                  {[
-                    t('events.asset'), t('events.date'), t('events.direction'),
-                    t('events.magnitude'), t('events.status'), t('events.confidence'), '',
-                  ].map((h) => (
-                    <th key={h} className="px-5 py-3 text-left text-xs text-fin-muted font-medium uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((ev) => {
-                  const analyses = ev.analysis_results ?? []
-                  const latest   = analyses[analyses.length - 1] ?? null
-                  return (
-                    <tr
-                      key={ev.id}
-                      onClick={() => navigate(`/events/${ev.id}`)}
-                      className="border-b border-fin-border/30 hover:bg-fin-border/10 cursor-pointer transition-colors"
-                    >
-                      <td className="px-5 py-3 font-mono font-semibold text-fin-text">{ev.asset_code}</td>
-                      <td className="px-5 py-3 text-fin-muted font-mono text-xs">
-                        {format(new Date(ev.event_date), 'dd MMM yyyy')}
-                      </td>
-                      <td className="px-5 py-3"><DirectionBadge direction={ev.direction} /></td>
-                      <td className="px-5 py-3 text-fin-muted font-mono text-xs">
-                        {ev.magnitude != null ? `${ev.magnitude > 0 ? '+' : ''}${ev.magnitude}%` : '—'}
-                      </td>
-                      <td className="px-5 py-3">
-                        {latest
-                          ? <StatusBadge status={latest.status} />
-                          : <span className="text-xs text-fin-muted/60 italic">{t('dashboard.noAnalysis')}</span>
-                        }
-                      </td>
-                      <td className="px-5 py-3 w-36">
-                        {latest ? <ConfidenceBar value={latest.confidence} /> : '—'}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <span className="text-xs text-fin-accent">{t('common.view')}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* ── Mobile cards (hidden on sm+) ─────────────────── */}
+            <div className="sm:hidden divide-y divide-fin-border/30">
+              {events.map((ev) => {
+                const analyses = ev.analysis_results ?? []
+                const latest   = analyses[analyses.length - 1] ?? null
+                return (
+                  <div
+                    key={ev.id}
+                    onClick={() => navigate(`/events/${ev.id}`)}
+                    className="p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-fin-border/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-fin-text">{ev.asset_code}</span>
+                          <DirectionBadge direction={ev.direction} />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-fin-muted font-mono">
+                            {format(new Date(ev.event_date), 'dd MMM yyyy')}
+                          </span>
+                          {ev.magnitude != null && (
+                            <span className="text-xs text-fin-muted font-mono">
+                              {ev.magnitude > 0 ? '+' : ''}{ev.magnitude}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {latest
+                        ? <StatusBadge status={latest.status} />
+                        : <span className="text-xs text-fin-muted/60 italic">{t('dashboard.noAnalysis')}</span>
+                      }
+                      <ChevronRight size={14} className="text-fin-muted/40" />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* ── Desktop table (hidden on mobile) ─────────────── */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-fin-border/60">
+                    {[
+                      t('events.asset'), t('events.date'), t('events.direction'),
+                      t('events.magnitude'), t('events.status'), t('events.confidence'), '',
+                    ].map((h) => (
+                      <th key={h} className="px-5 py-3 text-left text-xs text-fin-muted font-medium uppercase tracking-wide">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((ev) => {
+                    const analyses = ev.analysis_results ?? []
+                    const latest   = analyses[analyses.length - 1] ?? null
+                    return (
+                      <tr
+                        key={ev.id}
+                        onClick={() => navigate(`/events/${ev.id}`)}
+                        className="border-b border-fin-border/30 hover:bg-fin-border/10 cursor-pointer transition-colors"
+                      >
+                        <td className="px-5 py-3 font-mono font-semibold text-fin-text">{ev.asset_code}</td>
+                        <td className="px-5 py-3 text-fin-muted font-mono text-xs">
+                          {format(new Date(ev.event_date), 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-5 py-3"><DirectionBadge direction={ev.direction} /></td>
+                        <td className="px-5 py-3 text-fin-muted font-mono text-xs">
+                          {ev.magnitude != null ? `${ev.magnitude > 0 ? '+' : ''}${ev.magnitude}%` : '—'}
+                        </td>
+                        <td className="px-5 py-3">
+                          {latest
+                            ? <StatusBadge status={latest.status} />
+                            : <span className="text-xs text-fin-muted/60 italic">{t('dashboard.noAnalysis')}</span>
+                          }
+                        </td>
+                        <td className="px-5 py-3 w-36">
+                          {latest ? <ConfidenceBar value={latest.confidence} /> : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="text-xs text-fin-accent">{t('common.view')}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -20,6 +20,12 @@
     font-family: ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Prevent text size adjustment on orientation change */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 }
 
 @layer components {
@@ -36,9 +42,12 @@
     color: white;
     font-weight: 500;
     padding: 0.5rem 1rem;
+    min-height: 2.5rem;   /* 40px touch target */
     border-radius: 0.5rem;
     transition: background-color 0.2s;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
   }
   .btn-primary:hover {
     background-color: #2563eb;
@@ -53,9 +62,12 @@
     color: var(--color-fin-text);
     font-weight: 500;
     padding: 0.5rem 1rem;
+    min-height: 2.5rem;   /* 40px touch target */
     border-radius: 0.5rem;
     transition: background-color 0.2s;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
   }
   .btn-secondary:hover {
     background-color: var(--color-fin-border);
@@ -70,6 +82,7 @@
     border: 1px solid var(--color-fin-border);
     border-radius: 0.5rem;
     padding: 0.5rem 1rem;
+    min-height: 2.5rem;   /* 40px touch target */
     color: var(--color-fin-text);
     outline: none;
     transition: box-shadow 0.2s, border-color 0.2s;

@@ -74,7 +74,7 @@ export default function CredibilityBoard() {
   }))
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-fin-text">{t('credibility.title')}</h1>

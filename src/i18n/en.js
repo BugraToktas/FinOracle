@@ -166,6 +166,7 @@ export default {
     save: 'Save',
     cancel: 'Cancel',
     view: 'View →',
+    new: 'New',
     score: 'Score',
   },
 }

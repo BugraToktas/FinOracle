@@ -200,8 +200,8 @@ export default function NewEvent() {
   const limitReached = todayCount !== null && todayCount >= DAILY_LIMIT
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <div className="p-4 md:p-6 max-w-2xl">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-fin-text">{t('newEvent.title')}</h1>
           <p className="text-sm text-fin-muted mt-0.5">{t('newEvent.subtitle')}</p>
@@ -218,7 +218,7 @@ export default function NewEvent() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
         {/* Asset code */}
         <div>
           <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
@@ -288,7 +288,7 @@ export default function NewEvent() {
         </div>
 
         {/* Date + Direction + Magnitude */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
               {t('newEvent.eventDate')}

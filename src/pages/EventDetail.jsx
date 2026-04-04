@@ -204,7 +204,7 @@ export default function EventDetail() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-3xl">
       {/* Back */}
       <button
         onClick={() => navigate(-1)}
