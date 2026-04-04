@@ -222,8 +222,8 @@ export default function NewEvent() {
         {/* Asset code */}
         <div>
           <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-            Asset Code
-            <span className="ml-1 normal-case font-normal text-fin-muted/60">(optional — inferred from question)</span>
+            {t('newEvent.assetCode')}
+            <span className="ml-1 normal-case font-normal text-fin-muted/60">{t('newEvent.assetCodeOptional')}</span>
           </label>
           <div className="relative">
             <input
@@ -249,7 +249,7 @@ export default function NewEvent() {
             <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-fin-accent/10 border border-fin-accent/30">
               <Zap size={13} className="text-fin-accent shrink-0" />
               <span className="text-xs text-fin-muted flex-1">
-                Detected from question:
+                {t('newEvent.detected')}
               </span>
               <button
                 type="button"
@@ -291,7 +291,7 @@ export default function NewEvent() {
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              Event Date
+              {t('newEvent.eventDate')}
             </label>
             <input
               type="date"
@@ -304,7 +304,7 @@ export default function NewEvent() {
 
           <div>
             <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              Direction
+              {t('newEvent.direction')}
             </label>
             <div className="flex gap-2">
               {['up', 'down'].map((d) => (
@@ -320,7 +320,7 @@ export default function NewEvent() {
                       : 'border-fin-border text-fin-muted hover:border-fin-muted'
                   }`}
                 >
-                  {d === 'up' ? '▲ UP' : '▼ DOWN'}
+                  {d === 'up' ? t('newEvent.dirUp') : t('newEvent.dirDown')}
                 </button>
               ))}
             </div>
@@ -328,7 +328,7 @@ export default function NewEvent() {
 
           <div>
             <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              Magnitude % <span className="normal-case">(optional)</span>
+              {t('newEvent.magnitude')} <span className="normal-case font-normal">{t('newEvent.magnitudeOptional')}</span>
             </label>
             <input
               type="number"
@@ -344,7 +344,7 @@ export default function NewEvent() {
         {/* Question */}
         <div>
           <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-            Analysis Question
+            {t('newEvent.questionLabel')}
           </label>
           <textarea
             value={form.question}
@@ -355,7 +355,7 @@ export default function NewEvent() {
             required
           />
           <div className="mt-2 space-y-1">
-            <p className="text-xs text-fin-muted">Quick templates:</p>
+            <p className="text-xs text-fin-muted">{t('newEvent.quickTemplates')}</p>
             <div className="flex flex-col gap-1">
               {QUESTION_TEMPLATES.map((tpl) => (
                 <button
@@ -407,7 +407,7 @@ export default function NewEvent() {
 
         {loading && (
           <p className="text-xs text-center text-fin-muted animate-pulse">
-            Retrieving sources and generating analysis — this may take 10–25 seconds…
+            {t('newEvent.analysingHint')}
           </p>
         )}
       </form>

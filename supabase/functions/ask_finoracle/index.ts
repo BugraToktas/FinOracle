@@ -232,6 +232,52 @@ type RetrievedItem = {
   snippet?: string | null;
 };
 
+// ─── Gemini text-embedding-004 (768 dims) ────────────────────────────────────
+
+async function generateEmbedding(text: string): Promise<number[] | null> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) return null;
+
+  const cleanText = text.replace(/\s+/g, " ").trim().slice(0, 2000);
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "models/text-embedding-004",
+          content: { parts: [{ text: cleanText }] }
+        }),
+        signal: AbortSignal.timeout(8_000),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json() as { embedding?: { values?: number[] } };
+    return data?.embedding?.values ?? null;
+  } catch { return null; }
+}
+
+/** Store embeddings for a batch of docs fire-and-forget (doesn't block response). */
+function storeEmbeddingsAsync(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  docs: Array<{ id: string; url: string; title: string; content_snippet?: string | null }>
+): void {
+  (async () => {
+    for (const doc of docs) {
+      const text = [doc.title, doc.content_snippet].filter(Boolean).join(" ");
+      if (!text.trim()) continue;
+      const embedding = await generateEmbedding(text);
+      if (!embedding) continue;
+      await supabase
+        .from("source_documents")
+        .update({ embedding })
+        .eq("id", doc.id)
+        .is("embedding", null); // only update rows without embedding yet
+    }
+  })().catch(() => {}); // never throws
+}
+
 type AskAnswer = {
   summary: string;
   confidence: number;
@@ -316,13 +362,22 @@ Deno.serve(async (req) => {
 
     const supabase = getSupabaseServiceClient();
 
-    // 1) Upsert market_event
+    // ── Resolve caller's user_id from JWT (optional — falls back to null) ──────
+    let userId: string | null = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const { data: { user } } = await supabase.auth.getUser(token);
+      userId = user?.id ?? null;
+    }
+
+    // 1) Upsert market_event (shared across users — user_id only on first insert)
     step = "upsert_market_event";
     const { data: event, error: eErr } = await supabase
       .from("market_events")
       .upsert(
         { asset_code: body.asset_code, event_date: body.event_date, direction: body.direction },
-        { onConflict: "asset_code,event_date,direction" }
+        { onConflict: "asset_code,event_date,direction", ignoreDuplicates: false }
       )
       .select("id, asset_code, event_date, direction")
       .single();
@@ -331,34 +386,59 @@ Deno.serve(async (req) => {
       return json(500, { step, error: "failed to upsert market_event", details: eErr?.message });
     }
 
-    // 2) Retrieve sources — ask for 20 (10 Google News + 10 Yahoo + RSS)
-    // Use a clean English search query (never the raw user question which may be Turkish).
-    // Format: "{asset} {direction_keywords} {month_year}"
-    // This avoids non-English tokens polluting Google News search and RSS matching.
+    // 2) Retrieve sources — keyword-based + semantic search in parallel
     step = "retrieve_sources_call";
     const dirKeywords   = body.direction === "up" ? "surge rally" : "fall decline";
-    // Include human-readable name so Google News finds "Xiaomi" not just "1810.HK"
     const displayName   = ASSET_DISPLAY_NAMES[body.asset_code] ?? "";
-    // Note: month/year are intentionally excluded from retrieveQuery —
-    // they become overly broad tokens that match unrelated articles.
-    // Date range is already handled by retrieve_sources via event.event_date.
     const retrieveQuery = [body.asset_code, displayName, dirKeywords]
       .filter(Boolean).join(" ");
 
-    const rs = await postFn("retrieve_sources", {
-      query: retrieveQuery,
-      asset_code: body.asset_code,
-      limit: 20,
-      debug: false,
-      event: { event_date: body.event_date, asset_code: body.asset_code }
-    });
+    // Generate question embedding for semantic search (parallel with keyword fetch)
+    const [rs, questionEmbedding] = await Promise.all([
+      postFn("retrieve_sources", {
+        query: retrieveQuery,
+        asset_code: body.asset_code,
+        limit: 20,
+        debug: false,
+        event: { event_date: body.event_date, asset_code: body.asset_code }
+      }),
+      generateEmbedding(`${body.question} ${body.asset_code} ${displayName}`)
+    ]);
 
     if (!rs.ok) {
       return json(500, { step, error: "retrieve_sources_failed", status: rs.status, details: rs.text });
     }
 
     const rsJson = JSON.parse(rs.text);
-    const retrieved: RetrievedItem[] = Array.isArray(rsJson.items) ? rsJson.items : [];
+    const keywordResults: RetrievedItem[] = Array.isArray(rsJson.items) ? rsJson.items : [];
+
+    // Semantic search — find existing DB docs similar to this question
+    let semanticResults: RetrievedItem[] = [];
+    if (questionEmbedding) {
+      const { data: semRows } = await supabase.rpc("match_source_documents", {
+        query_embedding: questionEmbedding,
+        match_threshold: 0.55,
+        match_count: 10
+      });
+      if (Array.isArray(semRows)) {
+        semanticResults = semRows.map((r: Record<string, unknown>) => ({
+          url:          String(r.url ?? ""),
+          title:        String(r.title ?? ""),
+          domain:       String(r.domain ?? ""),
+          published_at: r.published_at ? String(r.published_at) : null,
+          snippet:      r.content_snippet ? String(r.content_snippet) : null,
+        }));
+      }
+    }
+
+    // Merge: semantic results first (higher relevance), then keyword, deduplicate by URL
+    const seenUrls = new Set<string>();
+    const retrieved: RetrievedItem[] = [];
+    for (const item of [...semanticResults, ...keywordResults]) {
+      if (!item.url || seenUrls.has(item.url)) continue;
+      seenUrls.add(item.url);
+      retrieved.push(item);
+    }
 
     // 3) Upsert source_documents
     // FIX: snippet → content_snippet; provider removed (not in schema)
@@ -430,7 +510,7 @@ Deno.serve(async (req) => {
           .slice(0, 8)
       : retrieved.slice(0, 5); // fallback: top-5 if LLM returned no indices
 
-    // 5) Insert analysis_results (verified column dropped — use status only)
+    // 5) Insert analysis_results — include user_id for per-user daily limit & history
     step = "insert_analysis_results";
     const verifyAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -442,13 +522,28 @@ Deno.serve(async (req) => {
         confidence: answer.confidence,
         raw_response: answer.raw_response,
         verify_after: verifyAfter,
-        status: "pending"
+        status: "pending",
+        ...(userId ? { user_id: userId } : {})
       }])
       .select("id, created_at")
       .single();
 
     if (aErr || !analysisRow) {
       return json(500, { step, error: "failed_to_insert_analysis_results", details: aErr?.message });
+    }
+
+    // 5b) Store embeddings for newly upserted docs (fire-and-forget, doesn't block)
+    if (upsertedDocs.length > 0) {
+      const docsForEmbedding = upsertedDocs.map((d) => {
+        const original = docsToUpsert.find((x) => x.url === d.url);
+        return {
+          id: d.id,
+          url: d.url,
+          title: original?.title ?? "",
+          content_snippet: original?.content_snippet ?? null,
+        };
+      });
+      storeEmbeddingsAsync(supabase, docsForEmbedding);
     }
 
     // 6) Link source_documents → analysis_document_links

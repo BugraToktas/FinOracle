@@ -40,28 +40,29 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-4 px-2 space-y-1">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
-                isActive
-                  ? 'bg-fin-accent/15 text-fin-accent'
-                  : 'text-fin-muted hover:text-fin-text hover:bg-fin-border/30'
-              }`
-            }
-          >
-            <Icon size={16} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      {/* Nav + user info stacked together, no flex-1 stretch */}
+      <div className="flex-1 flex flex-col py-4 px-2">
+        <nav className="space-y-1">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                  isActive
+                    ? 'bg-fin-accent/15 text-fin-accent'
+                    : 'text-fin-muted hover:text-fin-text hover:bg-fin-border/30'
+                }`
+              }
+            >
+              <Icon size={16} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
 
-      {/* Bottom: language + user */}
-      <div className="px-4 py-4 border-t border-fin-border space-y-3">
+        {/* Language + user: right below nav items */}
+        <div className="mt-4 pt-4 border-t border-fin-border space-y-3 px-2">
         {/* Language switcher */}
         <div className="flex items-center gap-1">
           <Globe size={13} className="text-fin-muted mr-1" />
@@ -100,6 +101,7 @@ export default function Sidebar() {
         ) : (
           <p className="text-xs text-fin-muted/60">FinOracle v1.0</p>
         )}
+        </div>
       </div>
     </aside>
   )

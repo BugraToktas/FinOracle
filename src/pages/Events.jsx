@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Search, Filter, PlusCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import StatusBadge from '../components/StatusBadge'
@@ -7,20 +8,8 @@ import DirectionBadge from '../components/DirectionBadge'
 import ConfidenceBar from '../components/ConfidenceBar'
 import { getAllEvents } from '../services/eventService'
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'verified', label: 'Verified' },
-  { value: 'failed', label: 'Failed' },
-]
-
-const DIRECTION_OPTIONS = [
-  { value: '', label: 'All directions' },
-  { value: 'up', label: 'UP' },
-  { value: 'down', label: 'DOWN' },
-]
-
 export default function Events() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,6 +22,19 @@ export default function Events() {
     from: '',
     to: '',
   })
+
+  const STATUS_OPTIONS = [
+    { value: '', label: t('events.allStatuses') },
+    { value: 'pending',  label: t('events.statusPending')  },
+    { value: 'verified', label: t('events.statusVerified') },
+    { value: 'failed',   label: t('events.statusFailed')   },
+  ]
+
+  const DIRECTION_OPTIONS = [
+    { value: '', label: t('events.allDirections') },
+    { value: 'up',   label: t('events.dirUp')   },
+    { value: 'down', label: t('events.dirDown') },
+  ]
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,13 +55,17 @@ export default function Events() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
+  const hasFilters = filters.assetCode || filters.direction || filters.status || filters.from || filters.to
+
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-fin-text">Market Events</h1>
+          <h1 className="text-xl font-bold text-fin-text">{t('events.title')}</h1>
           <p className="text-sm text-fin-muted mt-0.5">
-            {loading ? 'Loading…' : `${events.length} event${events.length !== 1 ? 's' : ''} found`}
+            {loading
+              ? t('common.loading')
+              : t('events.subtitleCount_other', { count: events.length })}
           </p>
         </div>
         <button
@@ -67,7 +73,7 @@ export default function Events() {
           className="btn-primary flex items-center gap-2 text-sm"
         >
           <PlusCircle size={15} />
-          New Event
+          {t('events.newEvent')}
         </button>
       </div>
 
@@ -75,14 +81,14 @@ export default function Events() {
       <div className="glass-panel p-4">
         <div className="flex items-center gap-2 mb-3 text-xs text-fin-muted font-medium uppercase tracking-wide">
           <Filter size={12} />
-          Filters
+          {t('events.filters')}
         </div>
         <div className="flex flex-wrap gap-3">
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-fin-muted pointer-events-none" />
             <input
               type="text"
-              placeholder="Asset code…"
+              placeholder={t('events.filterAsset')}
               value={filters.assetCode}
               onChange={(e) => setFilter('assetCode', e.target.value)}
               className="input-field pl-8 text-sm h-9 w-36"
@@ -114,22 +120,22 @@ export default function Events() {
             value={filters.from}
             onChange={(e) => setFilter('from', e.target.value)}
             className="input-field text-sm h-9"
-            title="From date"
+            title={t('events.filterFrom')}
           />
           <input
             type="date"
             value={filters.to}
             onChange={(e) => setFilter('to', e.target.value)}
             className="input-field text-sm h-9"
-            title="To date"
+            title={t('events.filterTo')}
           />
 
-          {(filters.assetCode || filters.direction || filters.status || filters.from || filters.to) && (
+          {hasFilters && (
             <button
               onClick={() => setFilters({ assetCode: '', direction: '', status: '', from: '', to: '' })}
               className="btn-secondary text-xs h-9 px-3"
             >
-              Clear
+              {t('events.clear')}
             </button>
           )}
         </div>
@@ -140,17 +146,28 @@ export default function Events() {
         {error ? (
           <div className="p-6 text-fin-down text-sm">{error}</div>
         ) : loading ? (
-          <div className="flex items-center justify-center py-16 text-fin-muted text-sm">Loading…</div>
+          <div className="flex items-center justify-center py-16 text-fin-muted text-sm">
+            {t('common.loading')}
+          </div>
         ) : events.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <p className="text-fin-muted text-sm">No events match your filters.</p>
+            <p className="text-fin-muted text-sm">{t('events.noEvents')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-fin-border/60">
-                  {['Asset', 'Date', 'Direction', 'Magnitude', 'Analyses', 'Latest Status', 'Confidence', ''].map((h) => (
+                  {[
+                    t('events.asset'),
+                    t('events.date'),
+                    t('events.direction'),
+                    t('events.magnitude'),
+                    t('events.analyses'),
+                    t('events.latestStatus'),
+                    t('events.confidence'),
+                    '',
+                  ].map((h) => (
                     <th key={h} className="px-5 py-3 text-left text-xs text-fin-muted font-medium uppercase tracking-wide whitespace-nowrap">
                       {h}
                     </th>
@@ -160,8 +177,7 @@ export default function Events() {
               <tbody>
                 {events.map((ev) => {
                   const analyses = ev.analysis_results ?? []
-                  const latest = analyses[analyses.length - 1] ?? null
-
+                  const latest   = analyses[analyses.length - 1] ?? null
                   return (
                     <tr
                       key={ev.id}
@@ -186,17 +202,16 @@ export default function Events() {
                         {analyses.length}
                       </td>
                       <td className="px-5 py-3">
-                        {latest ? (
-                          <StatusBadge status={latest.status} />
-                        ) : (
-                          <span className="text-xs text-fin-muted/50 italic">none</span>
-                        )}
+                        {latest
+                          ? <StatusBadge status={latest.status} />
+                          : <span className="text-xs text-fin-muted/50 italic">{t('events.none')}</span>
+                        }
                       </td>
                       <td className="px-5 py-3 w-32">
                         {latest ? <ConfidenceBar value={latest.confidence} /> : '—'}
                       </td>
                       <td className="px-5 py-3 text-right whitespace-nowrap">
-                        <span className="text-xs text-fin-accent">View →</span>
+                        <span className="text-xs text-fin-accent">{t('common.view')}</span>
                       </td>
                     </tr>
                   )

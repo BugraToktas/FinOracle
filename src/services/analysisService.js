@@ -83,18 +83,21 @@ export async function callRunVerificationQueue() {
   return data
 }
 
-/** How many analyses the current user has made today (UTC day). */
+/** How many analyses the current user has made today (UTC day). Per-user via RPC. */
 export const DAILY_LIMIT = 5
 
 export async function getTodayAnalysisCount() {
-  const todayUtc = new Date().toISOString().split('T')[0] // YYYY-MM-DD UTC
-  const { count, error } = await supabase
+  // Try the per-user RPC first (requires migration 20260316_user_profiles.sql)
+  const { data, error } = await supabase.rpc('get_today_analysis_count')
+  if (!error && typeof data === 'number') return data
+
+  // Fallback: global count (before migration is applied)
+  const todayUtc = new Date().toISOString().split('T')[0]
+  const { count } = await supabase
     .from('analysis_results')
     .select('id', { count: 'exact', head: true })
     .gte('created_at', `${todayUtc}T00:00:00Z`)
     .lt('created_at',  `${todayUtc}T23:59:59Z`)
-
-  if (error) return 0
   return count ?? 0
 }
 

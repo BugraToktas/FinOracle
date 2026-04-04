@@ -5,7 +5,7 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { Activity, Clock, BarChart2, Star, RefreshCw } from 'lucide-react'
+import { Activity, Clock, BarChart2, Star } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
@@ -13,11 +13,7 @@ import DirectionBadge from '../components/DirectionBadge'
 import ConfidenceBar from '../components/ConfidenceBar'
 import { getEventStats, getRecentEvents } from '../services/eventService'
 import { getTopSourceLabel } from '../services/credibilityService'
-import {
-  callRunVerificationQueue,
-  getConfidenceTrend,
-  getAssetDistribution,
-} from '../services/analysisService'
+import { getConfidenceTrend, getAssetDistribution } from '../services/analysisService'
 
 const BAR_COLORS = ['#6366f1','#8b5cf6','#a78bfa','#c4b5fd','#818cf8','#7c3aed','#4f46e5','#4338ca']
 
@@ -30,9 +26,7 @@ export default function Dashboard() {
   const [topSource, setTopSource]   = useState(null)
   const [trendData, setTrendData]   = useState([])
   const [assetData, setAssetData]   = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [queueRunning, setQueueRunning] = useState(false)
-  const [queueResult, setQueueResult]   = useState(null)
+  const [loading, setLoading] = useState(true)
 
   async function load() {
     setLoading(true)
@@ -58,45 +52,12 @@ export default function Dashboard() {
 
   useEffect(() => { load() }, [])
 
-  async function handleRunQueue() {
-    setQueueRunning(true)
-    setQueueResult(null)
-    try {
-      const res = await callRunVerificationQueue()
-      setQueueResult({ ok: true, processed: res?.processed ?? 0 })
-      load()
-    } catch (err) {
-      setQueueResult({ ok: false, error: err.message })
-    } finally {
-      setQueueRunning(false)
-    }
-  }
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-fin-text">{t('dashboard.title')}</h1>
-          <p className="text-sm text-fin-muted mt-0.5">{t('dashboard.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {queueResult && (
-            <span className={`text-xs ${queueResult.ok ? 'text-fin-up' : 'text-fin-down'}`}>
-              {queueResult.ok
-                ? t('dashboard.queueRan', { count: queueResult.processed })
-                : t('dashboard.queueError', { error: queueResult.error })}
-            </span>
-          )}
-          <button
-            onClick={handleRunQueue}
-            disabled={queueRunning}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
-            <RefreshCw size={14} className={queueRunning ? 'animate-spin' : ''} />
-            {t('dashboard.runQueue')}
-          </button>
-        </div>
+      <div>
+        <h1 className="text-xl font-bold text-fin-text">{t('dashboard.title')}</h1>
+        <p className="text-sm text-fin-muted mt-0.5">{t('dashboard.subtitle')}</p>
       </div>
 
       {/* Stat cards */}

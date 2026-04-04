@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
+import { enUS, tr } from 'date-fns/locale'
 import {
   ArrowLeft, ShieldCheck, ShieldX, Minus, RefreshCw,
   ChevronDown, ChevronUp, FileText, AlertCircle, Zap
@@ -12,14 +14,19 @@ import SourceList from '../components/SourceList'
 import { getEventById } from '../services/eventService'
 import { getAnalysesByEventId, callVerifyAnalysis } from '../services/analysisService'
 
-const VERDICT_CONFIG = {
-  correct: { label: 'Correct', icon: ShieldCheck, cls: 'text-fin-up bg-fin-up/10 border-fin-up/25' },
-  partial: { label: 'Partial', icon: Minus, cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25' },
-  wrong:   { label: 'Wrong',   icon: ShieldX, cls: 'text-fin-down bg-fin-down/10 border-fin-down/25' },
+function useLocale() {
+  const { i18n } = useTranslation()
+  return i18n.language === 'tr' ? tr : enUS
 }
 
 function VerdictBadge({ verdict }) {
-  const cfg = VERDICT_CONFIG[verdict]
+  const { t } = useTranslation()
+  const config = {
+    correct: { label: t('eventDetail.verdictCorrect'), icon: ShieldCheck, cls: 'text-fin-up bg-fin-up/10 border-fin-up/25' },
+    partial: { label: t('eventDetail.verdictPartial'), icon: Minus,       cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25' },
+    wrong:   { label: t('eventDetail.verdictWrong'),   icon: ShieldX,     cls: 'text-fin-down bg-fin-down/10 border-fin-down/25' },
+  }
+  const cfg = config[verdict]
   if (!cfg) return null
   const Icon = cfg.icon
   return (
@@ -31,6 +38,8 @@ function VerdictBadge({ verdict }) {
 }
 
 function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
+  const { t } = useTranslation()
+  const locale = useLocale()
   const [expanded, setExpanded] = useState(false)
   const revalidation = analysis.revalidations?.[0] ?? null
 
@@ -54,7 +63,7 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
             <StatusBadge status={analysis.status} />
             {revalidation && <VerdictBadge verdict={revalidation.verdict} />}
             <span className="text-xs text-fin-muted font-mono">
-              {format(new Date(analysis.created_at), 'dd MMM yyyy HH:mm')}
+              {format(new Date(analysis.created_at), 'dd MMM yyyy HH:mm', { locale })}
             </span>
           </div>
 
@@ -65,31 +74,33 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
               className="btn-secondary flex items-center gap-1.5 text-xs shrink-0"
             >
               <RefreshCw size={12} className={verifying ? 'animate-spin' : ''} />
-              {verifying ? 'Verifying…' : 'Verify now'}
+              {verifying ? t('eventDetail.rechecking') : t('eventDetail.recheck')}
             </button>
           )}
         </div>
 
         {/* Confidence */}
         <div className="mb-4">
-          <p className="text-xs text-fin-muted mb-1.5">Confidence</p>
+          <p className="text-xs text-fin-muted mb-1.5">{t('eventDetail.confidence')}</p>
           <ConfidenceBar value={analysis.confidence} />
         </div>
 
         {/* Summary */}
         <div className="mb-4">
-          <p className="text-xs text-fin-muted mb-1.5">AI Summary</p>
+          <p className="text-xs text-fin-muted mb-1.5">{t('eventDetail.aiSummary')}</p>
           <p className="text-sm text-fin-text leading-relaxed">{analysis.summary}</p>
         </div>
 
         {/* Revalidation */}
         {revalidation && (
           <div className="mb-4 p-3 rounded-lg bg-fin-dark/60 border border-fin-border/50">
-            <p className="text-xs text-fin-muted mb-1.5 font-medium uppercase tracking-wide">Recheck Result</p>
+            <p className="text-xs text-fin-muted mb-1.5 font-medium uppercase tracking-wide">
+              {t('eventDetail.recheckResult')}
+            </p>
             <div className="flex items-center gap-2 mb-1">
               <VerdictBadge verdict={revalidation.verdict} />
               <span className="text-xs text-fin-muted">
-                confidence: {Math.round((revalidation.confidence ?? 0) * 100)}%
+                {t('eventDetail.confidence')}: {Math.round((revalidation.confidence ?? 0) * 100)}%
               </span>
             </div>
             {revalidation.notes && (
@@ -106,17 +117,17 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
               className="flex items-center gap-1.5 text-xs text-fin-muted hover:text-fin-text transition-colors mb-2"
             >
               <FileText size={12} />
-              {sourceDocs.length} source document{sourceDocs.length !== 1 ? 's' : ''}
+              {t('eventDetail.sourceDocs_other', { count: sourceDocs.length })}
               {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
-
             {expanded && <SourceList sources={sourceDocs} />}
           </div>
         )}
 
         {analysis.verify_after && analysis.status === 'pending' && (
           <p className="text-xs text-fin-muted/60 mt-3">
-            Scheduled recheck: {format(new Date(analysis.verify_after), 'dd MMM yyyy HH:mm')}
+            {t('eventDetail.scheduledRecheck')}{' '}
+            {format(new Date(analysis.verify_after), 'dd MMM yyyy HH:mm', { locale })}
           </p>
         )}
       </div>
@@ -125,19 +136,21 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
 }
 
 export default function EventDetail() {
+  const { t } = useTranslation()
+  const locale = useLocale()
   const { id } = useParams()
-  const location = useLocation()
-  const navigate = useNavigate()
+  const location  = useLocation()
+  const navigate  = useNavigate()
 
   const freshAnalysisId = location.state?.freshAnalysisId ?? null
-  const inferredAsset   = location.state?.inferredAsset ?? null
+  const inferredAsset   = location.state?.inferredAsset   ?? null
 
-  const [event, setEvent] = useState(null)
+  const [event, setEvent]       = useState(null)
   const [analyses, setAnalyses] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [verifyingId, setVerifyingId] = useState(null)
-  const [verifyError, setVerifyError] = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [verifyingId, setVerifyingId]   = useState(null)
+  const [verifyError, setVerifyError]   = useState(null)
 
   async function load() {
     setLoading(true)
@@ -174,7 +187,7 @@ export default function EventDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64 text-fin-muted text-sm p-6">
-        Loading event…
+        {t('common.loading')}
       </div>
     )
   }
@@ -184,7 +197,7 @@ export default function EventDetail() {
       <div className="p-6">
         <div className="flex items-center gap-2 p-4 rounded-lg bg-fin-down/10 border border-fin-down/30 text-fin-down text-sm">
           <AlertCircle size={16} />
-          {error ?? 'Event not found.'}
+          {error ?? t('eventDetail.eventNotFound')}
         </div>
       </div>
     )
@@ -198,16 +211,14 @@ export default function EventDetail() {
         className="flex items-center gap-1.5 text-sm text-fin-muted hover:text-fin-text transition-colors"
       >
         <ArrowLeft size={15} />
-        Back
+        {t('eventDetail.back')}
       </button>
 
       {/* Inferred asset notice */}
       {inferredAsset && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-fin-accent/10 border border-fin-accent/30 text-sm">
           <Zap size={13} className="text-fin-accent shrink-0" />
-          <span className="text-fin-muted">
-            Asset code auto-detected from your question:
-          </span>
+          <span className="text-fin-muted">{t('eventDetail.inferredAsset')}</span>
           <span className="font-mono font-semibold text-fin-accent">{inferredAsset}</span>
         </div>
       )}
@@ -221,13 +232,15 @@ export default function EventDetail() {
               <DirectionBadge direction={event.direction} />
             </div>
             <p className="text-sm text-fin-muted">
-              {format(new Date(event.event_date), 'EEEE, dd MMMM yyyy')}
+              {format(new Date(event.event_date), 'EEEE, dd MMMM yyyy', { locale })}
             </p>
           </div>
 
           {event.magnitude != null && (
             <div className="text-right">
-              <p className="text-xs text-fin-muted uppercase tracking-wide mb-0.5">Magnitude</p>
+              <p className="text-xs text-fin-muted uppercase tracking-wide mb-0.5">
+                {t('eventDetail.magnitude')}
+              </p>
               <p className={`text-xl font-bold font-mono ${event.direction === 'up' ? 'text-fin-up' : 'text-fin-down'}`}>
                 {event.magnitude > 0 ? '+' : ''}{event.magnitude}%
               </p>
@@ -240,13 +253,13 @@ export default function EventDetail() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-fin-text">
-            AI Analyses ({analyses.length})
+            {t('eventDetail.aiAnalyses', { count: analyses.length })}
           </h2>
           <button
             onClick={() => navigate('/new-event')}
             className="text-xs text-fin-accent hover:underline"
           >
-            + New analysis
+            {t('eventDetail.newAnalysis')}
           </button>
         </div>
 
@@ -259,9 +272,9 @@ export default function EventDetail() {
 
         {analyses.length === 0 ? (
           <div className="glass-panel p-8 flex flex-col items-center gap-3 text-center">
-            <p className="text-fin-muted text-sm">No analyses yet for this event.</p>
+            <p className="text-fin-muted text-sm">{t('eventDetail.noAnalysis')}</p>
             <button onClick={() => navigate('/new-event')} className="btn-primary text-sm">
-              Generate Analysis
+              {t('eventDetail.generateAnalysis')}
             </button>
           </div>
         ) : (
