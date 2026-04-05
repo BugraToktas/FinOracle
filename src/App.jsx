@@ -7,6 +7,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import NewEvent from './pages/NewEvent'
 import CredibilityBoard from './pages/CredibilityBoard'
+import Admin from './pages/Admin'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="events/:id"  element={<EventDetail />} />
         <Route path="new-event"   element={<NewEvent />} />
         <Route path="credibility" element={<CredibilityBoard />} />
+        <Route path="admin"       element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

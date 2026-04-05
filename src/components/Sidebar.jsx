@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Activity, PlusCircle, ShieldCheck,
-  TrendingUp, LogOut, Globe, X,
+  TrendingUp, LogOut, Globe, X, Settings2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -13,7 +13,7 @@ const LANGS = [
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { t, i18n } = useTranslation()
-  const { user, signOut } = useAuth()
+  const { user, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
 
   const navItems = [
@@ -21,6 +21,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
     { to: '/events',      label: t('nav.events'),       icon: Activity },
     { to: '/new-event',   label: t('nav.newEvent'),     icon: PlusCircle },
     { to: '/credibility', label: t('nav.credibility'),  icon: ShieldCheck },
+    ...(isAdmin ? [{ to: '/admin', label: t('nav.admin'), icon: Settings2 }] : []),
   ]
 
   function changeLang(code) {

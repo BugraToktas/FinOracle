@@ -230,6 +230,7 @@ type RetrievedItem = {
   domain: string;
   published_at?: string | null;
   snippet?: string | null;
+  provider?: string | null;
 };
 
 // ─── Gemini text-embedding-004 (768 dims) ────────────────────────────────────
@@ -427,6 +428,7 @@ Deno.serve(async (req) => {
           domain:       String(r.domain ?? ""),
           published_at: r.published_at ? String(r.published_at) : null,
           snippet:      r.content_snippet ? String(r.content_snippet) : null,
+          provider:     r.provider ? String(r.provider) : null,
         }));
       }
     }
@@ -441,7 +443,6 @@ Deno.serve(async (req) => {
     }
 
     // 3) Upsert source_documents
-    // FIX: snippet → content_snippet; provider removed (not in schema)
     step = "upsert_source_documents";
     const docsToUpsert = retrieved
       .filter((it) => it?.url && it?.domain)
@@ -451,6 +452,7 @@ Deno.serve(async (req) => {
         domain: it.domain,
         published_at: it.published_at ?? null,
         content_snippet: it.snippet ?? null,
+        provider: it.provider ?? null,
         fetched_at: new Date().toISOString()
       }));
 

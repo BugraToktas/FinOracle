@@ -3,20 +3,35 @@ import { supabase } from '../lib/supabaseClient'
 
 const AuthContext = createContext(null)
 
+async function fetchIsAdmin(userId) {
+  if (!userId) return false
+  const { data } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', userId)
+    .single()
+  return data?.is_admin === true
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  async function handleSession(session) {
+    const u = session?.user ?? null
+    setUser(u)
+    setIsAdmin(u ? await fetchIsAdmin(u.id) : false)
+  }
+
   useEffect(() => {
-    // Load current session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      await handleSession(session)
       setLoading(false)
     })
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+      handleSession(session)
     })
 
     return () => subscription.unsubscribe()
@@ -25,7 +40,7 @@ export function AuthProvider({ children }) {
   const signOut = () => supabase.auth.signOut()
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

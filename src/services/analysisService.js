@@ -18,20 +18,32 @@ export async function callAskFinoracle({ asset_code, event_date, direction, ques
 /**
  * Get all analyses for an event, including linked source documents.
  */
+const SOURCE_DOC_FIELDS = `
+  id, url, domain, title, published_at, content_snippet, provider,
+  source_credibilities(reputation_score)
+`
+
 export async function getAnalysesByEventId(eventId) {
-  const { data, error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id
+
+  let query = supabase
     .from('analysis_results')
     .select(`
       id, event_id, summary, confidence, status, created_at, verify_after,
       analysis_document_links(
         weight_used,
-        source_documents(id, url, domain, title, published_at, content_snippet)
+        source_documents(${SOURCE_DOC_FIELDS})
       ),
       revalidations(id, verdict, confidence, notes, created_at)
     `)
     .eq('event_id', eventId)
     .order('created_at', { ascending: false })
 
+  // Filter to current user's analyses if logged in
+  if (uid) query = query.eq('user_id', uid)
+
+  const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
@@ -46,7 +58,7 @@ export async function getAnalysisById(analysisId) {
       id, event_id, summary, confidence, status, created_at, verify_after,
       analysis_document_links(
         weight_used,
-        source_documents(id, url, domain, title, published_at, content_snippet)
+        source_documents(${SOURCE_DOC_FIELDS})
       ),
       revalidations(id, verdict, confidence, notes, created_at)
     `)
@@ -101,12 +113,17 @@ export async function getTodayAnalysisCount() {
   return count ?? 0
 }
 
-/** Confidence trend for the last N days (for dashboard chart). */
+/** Confidence trend for the last N days (for dashboard chart) — current user only. */
 export async function getConfidenceTrend(days = 30) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id
+  if (!uid) return []
+
   const since = new Date(Date.now() - days * 86400_000).toISOString()
   const { data, error } = await supabase
     .from('analysis_results')
     .select('confidence, created_at')
+    .eq('user_id', uid)
     .gte('created_at', since)
     .order('created_at', { ascending: true })
 
@@ -128,11 +145,25 @@ export async function getConfidenceTrend(days = 30) {
   }))
 }
 
-/** Asset distribution for pie/bar chart. */
+/** Asset distribution for bar chart — current user only (via their analysis_results). */
 export async function getAssetDistribution() {
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id
+  if (!uid) return []
+
+  // Get event_ids from my analyses
+  const { data: myAnalyses, error: aErr } = await supabase
+    .from('analysis_results')
+    .select('event_id')
+    .eq('user_id', uid)
+  if (aErr || !myAnalyses?.length) return []
+
+  const eventIds = [...new Set(myAnalyses.map((r) => r.event_id).filter(Boolean))]
+
   const { data, error } = await supabase
     .from('market_events')
     .select('asset_code')
+    .in('id', eventIds)
 
   if (error) return []
 
