@@ -19,8 +19,7 @@ export async function callAskFinoracle({ asset_code, event_date, direction, ques
  * Get all analyses for an event, including linked source documents.
  */
 const SOURCE_DOC_FIELDS = `
-  id, url, domain, title, published_at, content_snippet, provider,
-  source_credibilities(reputation_score)
+  id, url, domain, title, published_at, content_snippet, provider
 `
 
 export async function getAnalysesByEventId(eventId) {
@@ -30,7 +29,7 @@ export async function getAnalysesByEventId(eventId) {
   let query = supabase
     .from('analysis_results')
     .select(`
-      id, event_id, summary, confidence, status, created_at, verify_after,
+      id, event_id, question, summary, confidence, status, created_at, verify_after,
       analysis_document_links(
         weight_used,
         source_documents(${SOURCE_DOC_FIELDS})
@@ -95,8 +94,17 @@ export async function callRunVerificationQueue() {
   return data
 }
 
+/** Delete a single analysis result (only owner can delete via RLS). */
+export async function deleteAnalysis(analysisId) {
+  const { error } = await supabase
+    .from('analysis_results')
+    .delete()
+    .eq('id', analysisId)
+  if (error) throw error
+}
+
 /** How many analyses the current user has made today (UTC day). Per-user via RPC. */
-export const DAILY_LIMIT = 5
+export const DAILY_LIMIT = 10
 
 export async function getTodayAnalysisCount() {
   // Try the per-user RPC first (requires migration 20260316_user_profiles.sql)

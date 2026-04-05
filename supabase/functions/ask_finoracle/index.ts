@@ -520,6 +520,7 @@ Deno.serve(async (req) => {
       .from("analysis_results")
       .insert([{
         event_id: event.id,
+        question: body.question,
         summary: answer.summary,
         confidence: answer.confidence,
         raw_response: answer.raw_response,

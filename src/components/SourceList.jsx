@@ -22,24 +22,6 @@ function ProviderBadge({ provider }) {
   )
 }
 
-function ReputationDot({ score }) {
-  if (score == null) return null
-  const pct = Math.round(score * 100)
-  const color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444'
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] font-mono"
-      style={{ color }}
-      title={`Reputation: ${pct}%`}
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      {pct}%
-    </span>
-  )
-}
 
 export default function SourceList({ sources = [] }) {
   if (!sources.length) {
@@ -48,11 +30,8 @@ export default function SourceList({ sources = [] }) {
 
   return (
     <ul className="space-y-2">
-      {sources.map((src) => {
-        // Reputation score can come from joined source_credibilities
-        const repScore = src.source_credibilities?.[0]?.reputation_score ?? null
-
-        return (
+      {sources.map((src) =>         {
+          return (
           <li
             key={src.id}
             className="p-3 rounded-lg bg-fin-dark/60 border border-fin-border/40 hover:border-fin-border/70 transition-colors"
@@ -70,7 +49,7 @@ export default function SourceList({ sources = [] }) {
               </span>
             </a>
 
-            {/* Meta row: domain · date · provider · reputation */}
+            {/* Meta row: domain · date · provider */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] text-fin-muted/80 font-mono">{src.domain}</span>
 
@@ -87,13 +66,6 @@ export default function SourceList({ sources = [] }) {
                 <>
                   <span className="text-fin-border text-[10px]">·</span>
                   <ProviderBadge provider={src.provider} />
-                </>
-              )}
-
-              {repScore != null && (
-                <>
-                  <span className="text-fin-border text-[10px]">·</span>
-                  <ReputationDot score={repScore} />
                 </>
               )}
             </div>

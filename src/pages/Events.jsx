@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
 import ConfidenceBar from '../components/ConfidenceBar'
+import Skeleton from '../components/Skeleton'
 import { getAllEvents } from '../services/eventService'
 
 export default function Events() {
@@ -147,8 +148,14 @@ export default function Events() {
       {error ? (
         <div className="glass-panel p-6 text-fin-down text-sm">{error}</div>
       ) : loading ? (
-        <div className="glass-panel flex items-center justify-center py-16 text-fin-muted text-sm">
-          {t('common.loading')}
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="glass-panel p-4 h-[100px]">
+              <Skeleton className="w-1/3 h-5 mb-2" />
+              <Skeleton className="w-1/2 mt-2" />
+              <Skeleton className="w-full h-2 mt-4" />
+            </div>
+          ))}
         </div>
       ) : events.length === 0 ? (
         <div className="glass-panel flex flex-col items-center justify-center py-16 gap-3">
@@ -168,11 +175,18 @@ export default function Events() {
                   className="glass-panel p-4 cursor-pointer active:scale-[0.99] transition-transform"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono font-bold text-fin-text text-base">
-                        {ev.asset_code}
-                      </span>
-                      <DirectionBadge direction={ev.direction} />
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-fin-text text-base">
+                          {ev.asset_code}
+                        </span>
+                        <DirectionBadge direction={ev.direction} />
+                      </div>
+                      {latest?.question && (
+                        <p className="text-xs text-fin-muted/70 italic truncate mt-1 max-w-[200px]">
+                          "{latest.question}"
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {latest
@@ -239,8 +253,13 @@ export default function Events() {
                         onClick={() => navigate(`/events/${ev.id}`)}
                         className="border-b border-fin-border/30 hover:bg-fin-border/10 cursor-pointer transition-colors"
                       >
-                        <td className="px-5 py-3 font-mono font-semibold text-fin-text">
-                          {ev.asset_code}
+                        <td className="px-5 py-3 text-fin-text">
+                          <span className="font-mono font-semibold">{ev.asset_code}</span>
+                          {latest?.question && (
+                            <p className="text-xs text-fin-muted/70 italic truncate max-w-[180px] mt-0.5">
+                              "{latest.question}"
+                            </p>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-fin-muted font-mono text-xs whitespace-nowrap">
                           {format(new Date(ev.event_date), 'dd MMM yyyy')}

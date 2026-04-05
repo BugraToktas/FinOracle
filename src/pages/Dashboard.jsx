@@ -5,7 +5,7 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { Activity, Clock, BarChart2, Star, ChevronRight } from 'lucide-react'
+import { Activity, Clock, BarChart2, Star, ChevronRight, TrendingUp, Sparkles } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
@@ -169,10 +169,34 @@ export default function Dashboard() {
             {t('common.loading')}
           </div>
         ) : events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <p className="text-fin-muted text-sm">{t('dashboard.noEvents')}</p>
-            <button onClick={() => navigate('/new-event')} className="btn-primary text-sm">
-              {t('dashboard.addFirst')}
+          <div className="p-8 flex flex-col items-center text-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-fin-accent/15 flex items-center justify-center">
+              <TrendingUp size={22} className="text-fin-accent" />
+            </div>
+            <div>
+              <p className="text-fin-text font-semibold mb-1">{t('dashboard.welcomeTitle')}</p>
+              <p className="text-sm text-fin-muted max-w-sm leading-relaxed">{t('dashboard.welcomeDesc')}</p>
+            </div>
+            <div className="text-left w-full max-w-xs space-y-2 text-xs text-fin-muted">
+              {[
+                t('dashboard.welcomeStep1'),
+                t('dashboard.welcomeStep2'),
+                t('dashboard.welcomeStep3'),
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-fin-accent/20 text-fin-accent text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  {step}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate('/new-event')}
+              className="btn-primary flex items-center gap-2 text-sm mt-1"
+            >
+              <Sparkles size={15} />
+              {t('dashboard.welcomeCta')}
             </button>
           </div>
         ) : (

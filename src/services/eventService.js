@@ -94,7 +94,7 @@ export async function getAllEvents({ assetCode, direction, status, from, to } = 
     .from('market_events')
     .select(`
       id, asset_code, event_date, direction, magnitude, created_at,
-      analysis_results(id, status, confidence)
+      analysis_results(id, status, confidence, question)
     `)
     .in('id', eventIds)
     .order('event_date', { ascending: false })
@@ -119,6 +119,18 @@ export async function getAllEvents({ assetCode, direction, status, from, to } = 
   }
 
   return rows
+}
+
+/**
+ * Delete a market event (RLS: only users who have analyzed it can delete).
+ * Cascades to analysis_results, analysis_document_links, revalidations.
+ */
+export async function deleteEvent(id) {
+  const { error } = await supabase
+    .from('market_events')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
 }
 
 /**

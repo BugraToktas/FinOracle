@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Sparkles, AlertCircle, ChevronRight, Zap, X, Gauge } from 'lucide-react'
 import { callAskFinoracle, getTodayAnalysisCount, DAILY_LIMIT } from '../services/analysisService'
@@ -103,13 +103,15 @@ const QUESTION_TEMPLATES = [
 export default function NewEvent() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefill   = location.state?.prefill ?? null
 
   const [form, setForm] = useState({
-    asset_code: '',
-    event_date: new Date().toISOString().slice(0, 10),
-    direction: 'down',
+    asset_code: prefill?.asset_code ?? '',
+    event_date: prefill?.event_date ?? new Date().toISOString().slice(0, 10),
+    direction:  prefill?.direction  ?? 'down',
     magnitude: '',
-    question: '',
+    question: prefill?.question ?? '',
   })
 
   const [detected, setDetected]       = useState(null)
