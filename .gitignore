@@ -1,5 +1,6 @@
 # ─── Environment & secrets ────────────────────────────────────────────────────
 .env
+.env.*
 .env.local
 .env.*.local
 *.env
@@ -8,6 +9,7 @@
 node_modules/
 dist/
 dist-ssr/
+build/
 
 # ─── Vite ─────────────────────────────────────────────────────────────────────
 *.local
@@ -16,6 +18,11 @@ dist-ssr/
 # Keep functions and migrations tracked; ignore local dev state
 supabase/.branches/
 supabase/.temp/
+supabase/config.toml
+
+# Local-only SQL files (may contain credentials)
+*.local.sql
+supabase/migrations/pg_cron_credentials*.sql
 
 # ─── Editor ───────────────────────────────────────────────────────────────────
 .vscode/*
@@ -26,10 +33,17 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+.cursor/
 
 # ─── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+Desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 npm-debug.log*
@@ -37,12 +51,23 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+*.log
 
-# ─── Local-only SQL files (contain credentials) ───────────────────────────────
-*.local.sql
-supabase/migrations/pg_cron_credentials.local.sql
+# ─── Security: never commit keys, certs, credentials ─────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cert
+credentials.json
+service-account*.json
+*-credentials.json
+*secret*
+!src/i18n/*.js
 
-# ─── Misc ─────────────────────────────────────────────────────────────────────
+# ─── Dev notes (internal, not for public) ─────────────────────────────────────
 TODO.md
 willbedeleted.md
 implementation_plan.md
+NOTES.md
