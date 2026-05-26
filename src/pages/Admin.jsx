@@ -14,7 +14,7 @@ import { adminGetUsers, adminGetQueueStats, adminRunQueue } from '../services/ad
 export default function Admin() {
   const { t, i18n } = useTranslation()
   const locale = i18n.language === 'tr' ? tr : enUS
-  const { isAdmin } = useAuth()
+  const { isAdmin, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
   const [users, setUsers]           = useState([])
@@ -26,10 +26,10 @@ export default function Admin() {
   const [queueResult, setQueueResult]     = useState(null)
   const [queueError, setQueueError]       = useState(null)
 
-  // Guard: non-admins are redirected
+  // Guard: non-admins are redirected (wait for auth to finish loading first)
   useEffect(() => {
-    if (!isAdmin) navigate('/dashboard', { replace: true })
-  }, [isAdmin, navigate])
+    if (!authLoading && !isAdmin) navigate('/dashboard', { replace: true })
+  }, [authLoading, isAdmin, navigate])
 
   async function load() {
     setLoading(true)
@@ -62,6 +62,7 @@ export default function Admin() {
     }
   }
 
+  if (authLoading) return null
   if (!isAdmin) return null
 
   return (

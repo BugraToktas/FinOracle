@@ -24,6 +24,7 @@ export default {
     errorGeneric: 'Kimlik doğrulama başarısız. Lütfen tekrar deneyin.',
     orContinueWith: 'Veya şununla devam edin',
     continueGoogle: "Google ile devam et",
+    signUpSuccess: 'E-postanızdaki onay bağlantısını kontrol edin.',
   },
   dashboard: {
     title: 'Gösterge Paneli',
@@ -141,6 +142,7 @@ export default {
     verdictWrong: 'Yanlış',
     eventNotFound: 'Olay bulunamadı.',
     deleteEvent: 'Olayı Sil',
+    deleteAnalysis: 'Bu analizi sil',
     deleteConfirm: 'Bu olay ve tüm analizleri silinsin mi? Bu işlem geri alınamaz.',
     deleteConfirmYes: 'Sil',
     deleteConfirmNo: 'İptal',

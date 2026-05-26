@@ -26,6 +26,7 @@ export default {
     errorGeneric: 'Authentication failed. Please try again.',
     orContinueWith: 'Or continue with',
     continueGoogle: 'Continue with Google',
+    signUpSuccess: 'Check your email for the confirmation link.',
   },
   // Dashboard
   dashboard: {
@@ -147,6 +148,7 @@ export default {
     verdictWrong: 'Wrong',
     eventNotFound: 'Event not found.',
     deleteEvent: 'Delete Event',
+    deleteAnalysis: 'Delete this analysis',
     deleteConfirm: 'Delete this event and all its analyses? This cannot be undone.',
     deleteConfirmYes: 'Delete',
     deleteConfirmNo: 'Cancel',

@@ -12,7 +12,8 @@ import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
 import ConfidenceBar from '../components/ConfidenceBar'
 import SourceList from '../components/SourceList'
-import { getAnalysesByEventId, callVerifyAnalysis } from '../services/analysisService'
+import { getAnalysesByEventId, callVerifyAnalysis, deleteAnalysis } from '../services/analysisService'
+import { getEventById, deleteEvent } from '../services/eventService'
 import Skeleton from '../components/Skeleton'
 
 function useLocale() {
@@ -38,7 +39,7 @@ function VerdictBadge({ verdict }) {
   )
 }
 
-function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
+function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) {
   const { t } = useTranslation()
   const locale = useLocale()
   const [expanded, setExpanded] = useState(false)
@@ -55,7 +56,7 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
       {highlighted && (
         <div className="bg-fin-accent/10 border-b border-fin-accent/20 px-5 py-2 text-xs text-fin-accent font-medium flex items-center gap-1.5">
           <Sparkles size={12} />
-          New analysis
+          {t('eventDetail.newAnalysis')}
         </div>
       )}
 
@@ -70,17 +71,26 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying }) {
             </span>
           </div>
 
-          {canVerify && (
+          <div className="flex items-center gap-2 shrink-0">
+            {canVerify && (
+              <button
+                onClick={() => onVerify(analysis.id)}
+                disabled={verifying}
+                title={t('eventDetail.recheckTooltip')}
+                className="btn-secondary flex items-center gap-1.5 text-xs"
+              >
+                <RefreshCw size={12} className={verifying ? 'animate-spin' : ''} />
+                {verifying ? t('eventDetail.rechecking') : t('eventDetail.recheck')}
+              </button>
+            )}
             <button
-              onClick={() => onVerify(analysis.id)}
-              disabled={verifying}
-              title={t('eventDetail.recheckTooltip')}
-              className="btn-secondary flex items-center gap-1.5 text-xs shrink-0"
+              onClick={() => onDelete(analysis.id)}
+              title={t('eventDetail.deleteAnalysis')}
+              className="p-1.5 rounded-lg text-fin-muted hover:text-fin-down hover:bg-fin-down/10 transition-colors"
             >
-              <RefreshCw size={12} className={verifying ? 'animate-spin' : ''} />
-              {verifying ? t('eventDetail.rechecking') : t('eventDetail.recheck')}
+              <Trash2 size={13} />
             </button>
-          )}
+          </div>
         </div>
 
         {/* User's question */}
@@ -201,6 +211,7 @@ export default function EventDetail() {
   const [verifyError, setVerifyError] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deletingAnalysisId, setDeletingAnalysisId] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -231,6 +242,18 @@ export default function EventDetail() {
       setVerifyError(err.message)
     } finally {
       setVerifyingId(null)
+    }
+  }
+
+  async function handleDeleteAnalysis(analysisId) {
+    setDeletingAnalysisId(analysisId)
+    try {
+      await deleteAnalysis(analysisId)
+      setAnalyses((prev) => prev.filter((a) => a.id !== analysisId))
+    } catch (err) {
+      setVerifyError(err.message)
+    } finally {
+      setDeletingAnalysisId(null)
     }
   }
 
@@ -394,6 +417,7 @@ export default function EventDetail() {
                   highlighted={an.id === freshAnalysisId}
                   onVerify={handleVerify}
                   verifying={verifyingId === an.id}
+                  onDelete={handleDeleteAnalysis}
                 />
               ))}
             </div>

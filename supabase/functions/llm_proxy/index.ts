@@ -95,13 +95,14 @@ Rules for used_indices:
 Rules for confidence:
 - 0.75–1.0 : 2 or more sources within ±7 days that discuss ${assetCode} or direct market drivers for the period.
 - 0.5–0.74 : 1 relevant source within ±7 days, OR 2+ sources that discuss indirect but clearly related factors.
-- 0.25–0.49: Only contextual sources (macro conditions, sector news) with no direct ${assetCode} mention.
-- 0.0–0.24 : No sources are relevant to the asset or time period at all.
+- 0.25–0.49: Contextual sources (macro conditions, sector news) from outside the ±7 day window that still discuss ${assetCode} or related market dynamics.
+- 0.1–0.24 : Sources are outside the time window but discuss the asset class or broader market context that plausibly explains the move.
 
 Rules for summary:
 - 2–4 sentences. Focus on the most probable causes based on what the sources say.
-- If sources explain context but not exact causation, describe the context clearly.
-- Do not fabricate facts. Do not say "I cannot determine" unless truly no evidence exists.
+- If exact-date sources are unavailable, reason from the broader market context and sector dynamics described in the sources. State the reasoning is based on contextual evidence.
+- NEVER return confidence 0 or say "I cannot determine" just because sources are dated outside the event window. Always produce a best-effort analysis.
+- Do not fabricate specific prices, dates, or events not mentioned in the sources.
 
 User question: ${safeStr(inp?.question as string, 500)}
 Event: asset=${assetCode}, date=${eventDate}, direction=${direction}
@@ -112,6 +113,17 @@ ${sourcesBlock}
   }
 
   // ── recheck ─────────────────────────────────────────────────────────────
+  const recheckSources = inp?.source_priors as Record<string, unknown>[] | undefined;
+  const sourcesBlock = recheckSources && recheckSources.length > 0
+    ? recheckSources.map((s, i) => {
+        const title   = safeStr(s?.title   ?? "", 180);
+        const domain  = safeStr(s?.domain  ?? "", 60);
+        const date    = safeStr(s?.published_at ?? "unknown date", 40);
+        const snippet = s?.snippet ? ` - ${safeStr(s.snippet, 200)}` : "";
+        return `[${i + 1}] ${date} | ${domain} | ${title}${snippet}`;
+      }).join("\n")
+    : "No source documents available.";
+
   return `Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
 {
   "summary": string,
@@ -120,13 +132,16 @@ ${sourcesBlock}
   "sources": [{ "organization": string, "author_name": string }]
 }
 verdict rules:
-- "correct"  : initial summary is substantively accurate given the event
+- "correct"  : initial summary is substantively accurate given the event and sources
 - "partial"  : initial summary has the right direction but misses key drivers
-- "wrong"    : initial summary significantly contradicts current assessment
+- "wrong"    : initial summary significantly contradicts the sources or current assessment
 
 Task: Re-evaluate whether the initial analysis was accurate.
 Event: ${JSON.stringify(inp?.event ?? {})}
 Initial summary: ${safeStr(inp?.initial_summary as string, 1500)}
+
+Original sources used in the analysis:
+${sourcesBlock}
 `;
 }
 

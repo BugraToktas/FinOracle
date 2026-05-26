@@ -158,10 +158,10 @@ function rankAndTrim(
 ) {
   const deduped = uniqByUrl(items).filter((x) => x.domain);
 
-  // Hard date cutoff: drop articles more than 21 days from the event, UNLESS
-  // we'd end up with fewer than half the requested limit (keep freshness as fallback).
+  // Prefer sources within ±21 days of the event; if not enough, fall back to all sources.
+  // No hard cutoff — old events still get contextual analysis from recent sources.
   const withinWindow = deduped.filter((x) => dateDiffDays(x.published_at, eventDate) <= 21);
-  const pool = withinWindow.length >= Math.ceil(limit / 2) ? withinWindow : deduped;
+  const pool = withinWindow.length >= Math.ceil(limit / 3) ? withinWindow : deduped;
 
   return pool
     .sort((a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens))

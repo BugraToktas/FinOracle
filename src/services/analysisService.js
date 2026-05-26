@@ -9,8 +9,21 @@ export async function callAskFinoracle({ asset_code, event_date, direction, ques
     body: { asset_code, event_date, direction, question },
   })
 
-  if (error) throw new Error(error.message ?? 'ask_finoracle failed')
-  if (!data?.ok) throw new Error(data?.error ?? 'ask_finoracle returned not-ok')
+  if (error) {
+    // FunctionsRelayError / FunctionsHttpError — extract as much detail as possible
+    let detail = ''
+    try {
+      if (error.context && typeof error.context.text === 'function') {
+        detail = await error.context.text()
+      } else if (typeof error.context === 'string') {
+        detail = error.context
+      } else if (error.context) {
+        detail = JSON.stringify(error.context)
+      }
+    } catch { /* ignore */ }
+    throw new Error(`${error.message ?? 'ask_finoracle failed'}${detail ? ` — ${detail}` : ''}`)
+  }
+  if (!data?.ok) throw new Error(data?.message ?? data?.error ?? 'ask_finoracle returned not-ok')
 
   return data
 }

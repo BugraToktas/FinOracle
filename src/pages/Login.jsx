@@ -30,7 +30,7 @@ export default function Login() {
       } else {
         const { error: err } = await supabase.auth.signUp({ email, password })
         if (err) throw err
-        setSuccess('Check your email for the confirmation link.')
+        setSuccess(t('auth.signUpSuccess'))
       }
     } catch (err) {
       setError(err.message || t('auth.errorGeneric'))

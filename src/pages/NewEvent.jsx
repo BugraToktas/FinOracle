@@ -156,6 +156,7 @@ export default function NewEvent() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (loading) return
     setError(null)
 
     // Daily limit check

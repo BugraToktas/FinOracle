@@ -1,15 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CORS = {
+const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function json(status: number, body: unknown) {
+function getCorsHeaders(_req: Request): Record<string, string> {
+  return CORS;
+}
+
+function json(status: number, body: unknown, cors: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS }
+    headers: { "Content-Type": "application/json", ...cors }
   });
 }
 
@@ -42,18 +46,19 @@ async function callLLMProxy(task: "recheck", payload: unknown) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const cors = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   let analysisIdForFailMark: string | null = null;
 
   try {
-    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" }, cors);
 
     const body = await req.json().catch(() => null);
     const analysis_id = body?.analysis_id;
     analysisIdForFailMark = typeof analysis_id === "string" ? analysis_id : null;
 
     if (!analysisIdForFailMark) {
-      return json(400, { error: "analysis_id is required (string)" });
+      return json(400, { error: "analysis_id is required (string)" }, cors);
     }
 
     const supabase = getSupabaseServiceClient();
@@ -76,7 +81,7 @@ Deno.serve(async (req) => {
         analysis_id: analysisIdForFailMark,
         already_verified: true,
         revalidation_id: existingReval.id
-      });
+      }, cors);
     }
 
     // 1) Load analysis
@@ -87,7 +92,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (aErr || !analysis) {
-      return json(404, { error: "analysis not found", details: aErr?.message });
+      return json(404, { error: "analysis not found", details: aErr?.message }, cors);
     }
 
     // 2) Load event for richer recheck prompt
@@ -104,13 +109,32 @@ Deno.serve(async (req) => {
       .eq("analysis_id", analysisIdForFailMark);
 
     if (lErr) {
-      return json(500, { error: "failed to load analysis_source_links", details: lErr.message });
+      return json(500, { error: "failed to load analysis_source_links", details: lErr.message }, cors);
     }
+
+    // 3b) Load the original source documents linked to this analysis for richer recheck context
+    const { data: docLinks } = await supabase
+      .from("analysis_document_links")
+      .select("source_documents(url, title, domain, published_at, content_snippet)")
+      .eq("analysis_id", analysisIdForFailMark);
+
+    const sourcePriors = (docLinks ?? [])
+      .map((l: Record<string, unknown>) => l.source_documents as Record<string, unknown> | null)
+      .filter(Boolean)
+      .slice(0, 10)
+      .map((s: Record<string, unknown>) => ({
+        domain:       String(s.domain       ?? ""),
+        title:        String(s.title        ?? ""),
+        url:          String(s.url          ?? ""),
+        snippet:      s.content_snippet ? String(s.content_snippet) : null,
+        published_at: s.published_at    ? String(s.published_at)    : null,
+      }));
 
     // 4) Recheck via llm_proxy — returns { summary, confidence, verdict, raw_response }
     const llm = await callLLMProxy("recheck", {
       event: event ?? { id: analysis.event_id },
-      initial_summary: analysis.summary ?? ""
+      initial_summary: analysis.summary ?? "",
+      source_priors: sourcePriors,
     });
 
     const recheck = {
@@ -148,9 +172,9 @@ Deno.serve(async (req) => {
           .update({ status: "verified" })
           .eq("id", analysisIdForFailMark);
 
-        return json(200, { ok: true, analysis_id: analysisIdForFailMark, already_verified: true });
+        return json(200, { ok: true, analysis_id: analysisIdForFailMark, already_verified: true }, cors);
       }
-      return json(500, { error: "failed to insert revalidation", details: rErr?.message });
+      return json(500, { error: "failed to insert revalidation", details: rErr?.message }, cors);
     }
 
     // 6) Update reputation scores — atomic SQL to prevent race condition
@@ -175,7 +199,7 @@ Deno.serve(async (req) => {
       analysis_id: analysis.id,
       verdict,
       revalidation_id: revalRow.id
-    });
+    }, cors);
   } catch (err) {
     if (analysisIdForFailMark) {
       try {
@@ -186,6 +210,6 @@ Deno.serve(async (req) => {
           .eq("id", analysisIdForFailMark);
       } catch (_) { /* ignore */ }
     }
-    return json(500, { error: "internal_error", details: String(err) });
+    return json(500, { error: "internal_error", details: String(err) }, cors);
   }
 });

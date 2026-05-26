@@ -1,15 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CORS = {
+const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function json(status: number, body: unknown) {
+function getCorsHeaders(_req: Request): Record<string, string> {
+  return CORS;
+}
+
+function json(status: number, body: unknown, cors: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS }
+    headers: { "Content-Type": "application/json", ...cors }
   });
 }
 
@@ -21,9 +25,10 @@ function getSupabaseServiceClient() {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const cors = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   try {
-    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" }, cors);
 
     const supabase = getSupabaseServiceClient();
     const baseUrl = Deno.env.get("SUPABASE_URL");
@@ -42,12 +47,12 @@ Deno.serve(async (req) => {
       .limit(20);
 
     if (qErr) {
-      return json(500, { error: "failed to load queue", details: qErr.message });
+      return json(500, { error: "failed to load queue", details: qErr.message }, cors);
     }
 
     const ids = (due ?? []).map((r) => r.id);
     if (ids.length === 0) {
-      return json(200, { ok: true, processed: 0, message: "no due analyses" });
+      return json(200, { ok: true, processed: 0, message: "no due analyses" }, cors);
     }
 
     // 2) Run all verifications in parallel
@@ -85,8 +90,8 @@ Deno.serve(async (req) => {
     const succeeded = results.filter((r) => r.ok).length;
     const failed = results.length - succeeded;
 
-    return json(200, { ok: true, processed: results.length, succeeded, failed, results });
+    return json(200, { ok: true, processed: results.length, succeeded, failed, results }, cors);
   } catch (err) {
-    return json(500, { error: "internal_error", details: String(err) });
+    return json(500, { error: "internal_error", details: String(err) }, cors);
   }
 });

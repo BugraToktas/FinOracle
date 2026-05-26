@@ -1,15 +1,19 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const CORS = {
+const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function json(status: number, body: unknown) {
+function getCorsHeaders(_req: Request): Record<string, string> {
+  return CORS;
+}
+
+function json(status: number, body: unknown, cors: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS }
+    headers: { "Content-Type": "application/json", ...cors }
   });
 }
 
@@ -309,10 +313,11 @@ async function postFn(fnName: string, payload: unknown) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const cors = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   let step = "start";
   try {
-    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
+    if (req.method !== "POST") return json(405, { error: "Method Not Allowed" }, cors);
 
     step = "parse_body";
     const body = (await req.json().catch(() => null)) as AskInput | null;
@@ -356,7 +361,7 @@ Deno.serve(async (req) => {
         return json(400, {
           error: "Could not identify the financial asset in your question.",
           hint: "Please provide asset_code explicitly (e.g. 'BTC/USD', 'THYAO', 'USD/TRY') or mention the asset name more clearly in your question.",
-        });
+        }, cors);
       }
       body.asset_code = inferredAssetCode;
     }
@@ -368,8 +373,32 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id ?? null;
+      try {
+        const { data, error: authErr } = await supabase.auth.getUser(token);
+        if (!authErr) userId = data?.user?.id ?? null;
+      } catch { /* invalid/expired token — proceed as anonymous */ }
+    }
+
+    // ── Backend rate limiting: max 10 analyses per user per UTC day ──────────
+    const DAILY_LIMIT = 10;
+    if (userId) {
+      const todayUtc = new Date().toISOString().split("T")[0];
+      const { count: todayCount } = await supabase
+        .from("analysis_results")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", `${todayUtc}T00:00:00Z`)
+        .lt("created_at",  `${todayUtc}T23:59:59Z`);
+
+      if ((todayCount ?? 0) >= DAILY_LIMIT) {
+        return json(429, {
+          ok: false,
+          error: "daily_limit_reached",
+          message: `You have used all ${DAILY_LIMIT} daily analyses. Resets at midnight UTC.`,
+          limit: DAILY_LIMIT,
+          used: todayCount,
+        }, cors);
+      }
     }
 
     // 1) Upsert market_event (shared across users — user_id only on first insert)
@@ -384,22 +413,23 @@ Deno.serve(async (req) => {
       .single();
 
     if (eErr || !event) {
-      return json(500, { step, error: "failed to upsert market_event", details: eErr?.message });
+      return json(500, { step, error: "failed to upsert market_event", details: eErr?.message }, cors);
     }
 
     // 2) Retrieve sources — keyword-based + semantic search in parallel
     step = "retrieve_sources_call";
     const dirKeywords   = body.direction === "up" ? "surge rally" : "fall decline";
     const displayName   = ASSET_DISPLAY_NAMES[body.asset_code] ?? "";
-    const retrieveQuery = [body.asset_code, displayName, dirKeywords]
-      .filter(Boolean).join(" ");
+    // Include the user's actual question so retrieve_sources can match it against news titles/snippets
+    const retrieveQuery = [body.question, body.asset_code, displayName, dirKeywords]
+      .filter(Boolean).join(" ").slice(0, 300);
 
     // Generate question embedding for semantic search (parallel with keyword fetch)
     const [rs, questionEmbedding] = await Promise.all([
       postFn("retrieve_sources", {
         query: retrieveQuery,
         asset_code: body.asset_code,
-        limit: 20,
+        limit: 30,
         debug: false,
         event: { event_date: body.event_date, asset_code: body.asset_code }
       }),
@@ -407,7 +437,7 @@ Deno.serve(async (req) => {
     ]);
 
     if (!rs.ok) {
-      return json(500, { step, error: "retrieve_sources_failed", status: rs.status, details: rs.text });
+      return json(500, { step, error: "retrieve_sources_failed", status: rs.status, details: rs.text }, cors);
     }
 
     const rsJson = JSON.parse(rs.text);
@@ -464,7 +494,7 @@ Deno.serve(async (req) => {
         .select("id,url");
 
       if (dErr) {
-        return json(500, { step, error: "failed_to_upsert_source_documents", details: dErr.message });
+        return json(500, { step, error: "failed_to_upsert_source_documents", details: dErr.message }, cors);
       }
       upsertedDocs = (docRows ?? []) as Array<{ id: string; url: string }>;
     }
@@ -493,7 +523,7 @@ Deno.serve(async (req) => {
     }
 
     if (!lp.ok) {
-      return json(500, { step, error: "llm_proxy_failed", status: lp.status, details: lp.text.slice(0, 400) });
+      return json(500, { step, error: "llm_proxy_failed", status: lp.status, details: lp.text.slice(0, 400) }, cors);
     }
 
     const lpJson = JSON.parse(lp.text);
@@ -532,7 +562,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (aErr || !analysisRow) {
-      return json(500, { step, error: "failed_to_insert_analysis_results", details: aErr?.message });
+      return json(500, { step, error: "failed_to_insert_analysis_results", details: aErr?.message }, cors);
     }
 
     // 5b) Store embeddings for newly upserted docs (fire-and-forget, doesn't block)
@@ -550,9 +580,23 @@ Deno.serve(async (req) => {
     }
 
     // 6) Link source_documents → analysis_document_links
+    //    Use the LLM's actual cited sources (citedSources) instead of first-5 fallback
     step = "upsert_analysis_document_links";
     if (upsertedDocs.length > 0) {
-      const used = upsertedDocs.slice(0, 5);
+      // Build a URL→id map from upserted docs for fast lookup
+      const urlToDocId = new Map<string, string>();
+      for (const d of upsertedDocs) urlToDocId.set(d.url, d.id);
+
+      // Match citedSources to their DB ids; fall back to first 5 if none match
+      const citedDocIds = citedSources
+        .map((s) => urlToDocId.get(s.url))
+        .filter((id): id is string => Boolean(id))
+        .slice(0, 8);
+
+      const used = citedDocIds.length > 0
+        ? citedDocIds.map((id) => ({ id }))
+        : upsertedDocs.slice(0, 5);
+
       const w = 1 / used.length;
 
       for (const d of used) {
@@ -564,7 +608,7 @@ Deno.serve(async (req) => {
           );
 
         if (lErr) {
-          return json(500, { step, error: "failed_to_upsert_analysis_document_links", details: lErr.message });
+          return json(500, { step, error: "failed_to_upsert_analysis_document_links", details: lErr.message }, cors);
         }
       }
     }
@@ -616,8 +660,8 @@ Deno.serve(async (req) => {
         confidence: answer.confidence,
         sources: citedSources.map((d) => ({ domain: d.domain, title: d.title, url: d.url }))
       }
-    });
+    }, cors);
   } catch (err) {
-    return json(500, { ok: false, step, error: "internal_error", details: String(err) });
+    return json(500, { ok: false, step, error: "internal_error", details: String(err) }, cors);
   }
 });
