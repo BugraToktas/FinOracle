@@ -2,9 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Activity, PlusCircle, ShieldCheck,
-  TrendingUp, LogOut, Globe, X, Settings2,
+  LogOut, Globe, X, Settings2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import Logo from './Logo'
 
 const LANGS = [
   { code: 'en', label: 'EN' },
@@ -63,7 +64,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           className="flex items-center gap-2 rounded-lg text-left cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-fin-accent/50"
           aria-label="FinOracle home"
         >
-          <TrendingUp className="text-fin-accent shrink-0" size={22} />
+          <Logo size="sm" />
           <span className="text-fin-text font-bold text-lg tracking-tight">
             FinOracle
           </span>

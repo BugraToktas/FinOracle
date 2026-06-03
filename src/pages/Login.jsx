@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { TrendingUp, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+import Logo from '../components/Logo'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
@@ -53,10 +54,8 @@ export default function Login() {
       </div>
       <div className="w-full max-w-md relative page-enter">
 
-        <div className="flex items-center justify-center gap-2 mb-8 animate-fade-in-up">
-          <div className="w-9 h-9 rounded-lg bg-fin-accent flex items-center justify-center">
-            <TrendingUp size={20} className="text-white" />
-          </div>
+        <div className="flex items-center justify-center gap-2.5 mb-8 animate-fade-in-up">
+          <Logo size="md" />
           <span className="text-xl font-bold text-fin-text tracking-tight">FinOracle</span>
         </div>
 

@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  TrendingUp, Sparkles, ShieldCheck, Globe,
+  Sparkles, ShieldCheck, Globe,
   BarChart2, ChevronRight, ArrowRight, Check,
   BookOpen, Zap, Target,
 } from 'lucide-react'
 import { getLandingStats } from '../services/landingService'
 import LandingInteractiveBg from '../components/LandingInteractiveBg'
+import Logo from '../components/Logo'
 
 function Counter({ target, suffix = '' }) {
   const [value, setValue] = useState(0)
@@ -82,9 +83,7 @@ export default function Landing() {
             className="landing-logo-btn shrink-0"
             aria-label="FinOracle home"
           >
-            <div className="w-9 h-9 rounded-lg bg-fin-accent flex items-center justify-center shadow-lg shadow-fin-accent/20">
-              <TrendingUp size={18} className="text-white" />
-            </div>
+            <Logo size="md" />
             <span className="font-bold text-lg text-fin-text tracking-tight">FinOracle</span>
           </button>
 
@@ -335,7 +334,7 @@ export default function Landing() {
               onClick={() => navigate('/')}
               className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
             >
-              <TrendingUp size={15} className="text-fin-accent" />
+              <Logo size="xs" />
               <span className="font-semibold text-fin-muted">FinOracle</span>
             </button>
             <span className="hidden sm:inline">·</span>

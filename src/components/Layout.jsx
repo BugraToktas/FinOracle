@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { Menu, TrendingUp } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar'
+import Logo from './Logo'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -24,7 +25,7 @@ export default function Layout() {
           className="flex items-center gap-2 rounded-lg cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-fin-accent/50"
           aria-label="FinOracle home"
         >
-          <TrendingUp size={18} className="text-fin-accent" />
+          <Logo size="sm" />
           <span className="font-bold text-fin-text tracking-tight">FinOracle</span>
         </button>
       </header>
