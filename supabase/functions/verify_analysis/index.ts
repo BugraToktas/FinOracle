@@ -1,13 +1,25 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// CORS — ALLOWED_ORIGINS env değişkeninden alınan domain whitelist
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function getCorsHeaders(_req: Request): Record<string, string> {
-  return CORS;
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  const allowOrigin =
+    ALLOWED_ORIGINS[0] === "*"
+      ? "*"
+      : ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
 }
 
 function json(status: number, body: unknown, cors: Record<string, string> = {}) {
@@ -35,6 +47,8 @@ async function callLLMProxy(task: "recheck", payload: unknown) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // ask_finoracle ile tutarlı: Authorization + apikey ikisi birlikte
+      "Authorization": `Bearer ${anon}`,
       ...(anon ? { apikey: anon } : {})
     },
     body: JSON.stringify({ task, ...(payload as object) })
@@ -164,9 +178,9 @@ Deno.serve(async (req) => {
       .single();
 
     if (rErr || !revalRow) {
-      const msg = rErr?.message ?? "";
-      // Race condition: another request already inserted — treat as success
-      if (msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
+      // Race condition: başka bir istek zaten insert etti
+      // String matching yerine Postgres hata kodu 23505 (unique_violation) kullan
+      if ((rErr as any)?.code === "23505") {
         await supabase
           .from("analysis_results")
           .update({ status: "verified" })

@@ -22,8 +22,8 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-fin-bg flex items-center justify-center p-6">
-          <div className="glass-panel p-8 max-w-md w-full text-center space-y-4">
+        <div className="min-h-screen bg-fin-bg flex items-center justify-center p-6 page-enter">
+          <div className="glass-panel glass-panel-hover p-8 max-w-md w-full text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-fin-down/15 flex items-center justify-center mx-auto">
               <AlertCircle size={24} className="text-fin-down" />
             </div>

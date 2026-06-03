@@ -6,6 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { ShieldCheck, RefreshCw } from 'lucide-react'
+import PageShell from '../components/PageShell'
+import PageHeader from '../components/PageHeader'
 import { getAllSources } from '../services/credibilityService'
 
 function scoreColor(score) {
@@ -74,27 +76,27 @@ export default function CredibilityBoard() {
   }))
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-fin-text">{t('credibility.title')}</h1>
-          <p className="text-sm text-fin-muted mt-0.5">{t('credibility.subtitle')}</p>
-        </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="btn-secondary flex items-center gap-2 text-sm"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {t('credibility.refresh')}
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title={t('credibility.title')}
+        subtitle={t('credibility.subtitle')}
+        icon={ShieldCheck}
+        actions={
+          <button
+            onClick={load}
+            disabled={loading}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            {t('credibility.refresh')}
+          </button>
+        }
+      />
 
-      {/* Bar chart — top 10 */}
       {!loading && chartData.length > 0 && (
-        <div className="glass-panel p-5">
-          <h2 className="text-sm font-semibold text-fin-text mb-4">{t('credibility.top10')}</h2>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="glass-panel glass-panel-hover p-5">
+          <h2 className="section-heading mb-4">{t('credibility.top10')}</h2>
+          <ResponsiveContainer width="100%" height={360}>
             <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 16 }}>
               <XAxis
                 type="number"
@@ -127,7 +129,7 @@ export default function CredibilityBoard() {
       <div className="glass-panel overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-fin-border">
           <ShieldCheck size={15} className="text-fin-muted" />
-          <h2 className="text-sm font-semibold text-fin-text">
+          <h2 className="section-heading">
             {t('credibility.allSources', { count: sources.length })}
           </h2>
         </div>
@@ -170,7 +172,7 @@ export default function CredibilityBoard() {
                   const correct  = src.correct_predictions ?? 0
                   const accuracy = total > 0 ? correct / total : null
                   return (
-                    <tr key={src.id} className="border-b border-fin-border/30 hover:bg-fin-border/10 transition-colors">
+                    <tr key={src.id} className="border-b border-fin-border/30 table-row-hover">
                       <td className="px-5 py-3 text-fin-muted font-mono text-xs">#{i + 1}</td>
                       <td className="px-5 py-3 font-medium text-fin-text">{src.organization || '—'}</td>
                       <td className="px-5 py-3 text-fin-muted">{src.author_name || '—'}</td>
@@ -193,6 +195,6 @@ export default function CredibilityBoard() {
           </div>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }

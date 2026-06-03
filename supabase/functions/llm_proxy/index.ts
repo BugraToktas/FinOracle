@@ -8,10 +8,34 @@
 type Task = "ask" | "analyze" | "recheck" | "extract_asset";
 type Verdict = "correct" | "partial" | "wrong";
 
-function json(status: number, body: unknown) {
+// CORS — ALLOWED_ORIGINS env değişkeninden alınan domain whitelist
+// llm_proxy şu an sadece edge function'lardan çağrılıyor;
+// gelecekte direkt frontend çağrısı için hazır.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  const allowOrigin =
+    ALLOWED_ORIGINS[0] === "*"
+      ? "*"
+      : ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
+
+function json(status: number, body: unknown, cors: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json", ...cors }
   });
 }
 
@@ -251,14 +275,16 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
 }
 
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   try {
-    if (req.method !== "POST") return json(405, { ok: false, error: "Method Not Allowed" });
+    if (req.method !== "POST") return json(405, { ok: false, error: "Method Not Allowed" }, cors);
 
     const body = await req.json().catch(() => null);
     const task = body?.task as Task;
 
     if (!task || !["ask", "analyze", "recheck", "extract_asset"].includes(task)) {
-      return json(400, { ok: false, error: "task is required: ask | analyze | recheck | extract_asset" });
+      return json(400, { ok: false, error: "task is required: ask | analyze | recheck | extract_asset" }, cors);
     }
 
     const provider = (Deno.env.get("LLM_PROVIDER") ?? "gemini").toLowerCase();
@@ -287,16 +313,16 @@ Deno.serve(async (req) => {
           asset_code: obj?.asset_code ?? null,
           name: obj?.name ?? "",
           confidence: clamp01(Number(obj?.confidence ?? 0)),
-        });
+        }, cors);
       } catch {
-        return json(200, { ok: true, provider, task, asset_code: null, name: "", confidence: 0 });
+        return json(200, { ok: true, provider, task, asset_code: null, name: "", confidence: 0 }, cors);
       }
     }
 
     const norm = normalizeLLM(task, text, raw_response);
-    return json(200, { ok: true, provider, task, ...norm });
+    return json(200, { ok: true, provider, task, ...norm }, cors);
   } catch (err) {
     console.error("[llm_proxy] unhandled error:", String(err));
-    return json(500, { ok: false, error: "internal_error", details: String(err) });
+    return json(500, { ok: false, error: "internal_error", details: String(err) }, cors);
   }
 });

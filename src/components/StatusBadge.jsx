@@ -7,7 +7,7 @@ const CONFIG = {
 export default function StatusBadge({ status }) {
   const cfg = CONFIG[status] ?? CONFIG.pending
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cfg.cls}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium border transition-opacity duration-150 ${cfg.cls}`}>
       {cfg.label}
     </span>
   )

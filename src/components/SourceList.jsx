@@ -34,7 +34,7 @@ export default function SourceList({ sources = [] }) {
           return (
           <li
             key={src.id}
-            className="p-3 rounded-lg bg-fin-dark/60 border border-fin-border/40 hover:border-fin-border/70 transition-colors"
+            className="p-3 rounded-lg bg-fin-dark/60 border border-fin-border/40 hover:border-fin-accent/25 transition-all duration-200 hover:bg-fin-dark/80"
           >
             {/* Title + external link */}
             <a

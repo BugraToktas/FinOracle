@@ -10,13 +10,13 @@ export default function ConfidenceBar({ value }) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-1.5 bg-fin-border rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-fin-border rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          className={`h-full rounded-full transition-all duration-700 ease-out ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-mono text-fin-muted w-8 text-right">{pct}%</span>
+      <span className="text-sm font-mono text-fin-muted w-9 text-right tabular-nums">{pct}%</span>
     </div>
   )
 }

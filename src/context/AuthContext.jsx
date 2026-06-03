@@ -3,25 +3,36 @@ import { supabase } from '../lib/supabaseClient'
 
 const AuthContext = createContext(null)
 
-async function fetchIsAdmin(userId) {
-  if (!userId) return false
+async function fetchProfileDetails(userId) {
+  if (!userId) return { isAdmin: false, dailyLimit: 10 }
   const { data } = await supabase
     .from('profiles')
-    .select('is_admin')
+    .select('is_admin, daily_limit')
     .eq('id', userId)
     .single()
-  return data?.is_admin === true
+  return {
+    isAdmin: data?.is_admin === true,
+    dailyLimit: data?.daily_limit ?? 10
+  }
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser]             = useState(null)
+  const [isAdmin, setIsAdmin]       = useState(false)
+  const [dailyLimit, setDailyLimit] = useState(10)
+  const [loading, setLoading]       = useState(true)
 
   async function handleSession(session) {
     const u = session?.user ?? null
     setUser(u)
-    setIsAdmin(u ? await fetchIsAdmin(u.id) : false)
+    if (u) {
+      const details = await fetchProfileDetails(u.id)
+      setIsAdmin(details.isAdmin)
+      setDailyLimit(details.dailyLimit)
+    } else {
+      setIsAdmin(false)
+      setDailyLimit(10)
+    }
   }
 
   useEffect(() => {
@@ -40,7 +51,7 @@ export function AuthProvider({ children }) {
   const signOut = () => supabase.auth.signOut()
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>
+    <AuthContext.Provider value={{ user, isAdmin, dailyLimit, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

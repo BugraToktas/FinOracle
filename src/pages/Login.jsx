@@ -47,11 +47,13 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-fin-bg px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-fin-bg px-4 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[320px] rounded-full bg-fin-accent/6 blur-[100px]" />
+      </div>
+      <div className="w-full max-w-md relative page-enter">
 
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        <div className="flex items-center justify-center gap-2 mb-8 animate-fade-in-up">
           <div className="w-9 h-9 rounded-lg bg-fin-accent flex items-center justify-center">
             <TrendingUp size={20} className="text-white" />
           </div>
@@ -59,7 +61,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="glass-panel p-6 md:p-8">
+        <div className="glass-panel glass-panel-hover p-6 md:p-8 animate-fade-in-up hero-delay-1">
           <h1 className="text-lg font-bold text-fin-text mb-1">
             {mode === 'signin' ? t('auth.welcomeBack') : t('auth.createAccount')}
           </h1>
@@ -70,7 +72,7 @@ export default function Login() {
           {/* Google OAuth */}
           <button
             onClick={handleGoogle}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-fin-border text-sm text-fin-text hover:bg-fin-border/20 transition-colors mb-5"
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-fin-border text-sm text-fin-text hover:bg-fin-border/20 hover:border-fin-muted/50 transition-all duration-200 mb-5"
           >
             <svg width="18" height="18" viewBox="0 0 18 18">
               <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -126,14 +128,14 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-fin-down text-xs bg-fin-down/10 px-3 py-2 rounded-lg">
+              <div className="alert-banner alert-error text-xs">
                 <AlertCircle size={13} />
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="text-fin-up text-xs bg-fin-up/10 px-3 py-2 rounded-lg">
+              <div className="alert-banner alert-success text-xs">
                 {success}
               </div>
             )}

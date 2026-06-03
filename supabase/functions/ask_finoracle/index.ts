@@ -1,13 +1,28 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// CORS — ALLOWED_ORIGINS env değişkeninden alınan domain whitelist
+// Prod'da Supabase → Edge Functions → Secrets'e ekleyin:
+//   ALLOWED_ORIGINS=https://finoracle.app,https://www.finoracle.app
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function getCorsHeaders(_req: Request): Record<string, string> {
-  return CORS;
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  // Wildcard bypass sadece ALLOWED_ORIGINS="*" olduğunda
+  const allowOrigin =
+    ALLOWED_ORIGINS[0] === "*"
+      ? "*"
+      : ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
 }
 
 function json(status: number, body: unknown, cors: Record<string, string> = {}) {
@@ -280,7 +295,7 @@ function storeEmbeddingsAsync(
         .eq("id", doc.id)
         .is("embedding", null); // only update rows without embedding yet
     }
-  })().catch(() => {}); // never throws
+  })().catch((err) => console.error("[storeEmbeddingsAsync] failed:", String(err)));
 }
 
 type AskAnswer = {
@@ -379,23 +394,44 @@ Deno.serve(async (req) => {
       } catch { /* invalid/expired token — proceed as anonymous */ }
     }
 
-    // ── Backend rate limiting: max 10 analyses per user per UTC day ──────────
-    const DAILY_LIMIT = 10;
-    if (userId) {
+    // ── Anonim kullanıcılar reddedilir — auth zorunlu ────────────────────────
+    if (!userId) {
+      return json(401, {
+        ok: false,
+        error: "authentication_required",
+        message: "Please sign in to use FinOracle analysis.",
+      }, cors);
+    }
+
+    // ── Backend rate limiting: fetch user limit from profile ──────────────────
+    let dailyLimit = 10;
+    {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("daily_limit")
+        .eq("id", userId)
+        .single();
+      if (profile && typeof profile.daily_limit === "number") {
+        dailyLimit = profile.daily_limit;
+      }
+    }
+
+    {
       const todayUtc = new Date().toISOString().split("T")[0];
+      const tomorrowUtc = new Date(Date.now() + 86_400_000).toISOString().split("T")[0];
       const { count: todayCount } = await supabase
         .from("analysis_results")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
         .gte("created_at", `${todayUtc}T00:00:00Z`)
-        .lt("created_at",  `${todayUtc}T23:59:59Z`);
+        .lt("created_at",  `${tomorrowUtc}T00:00:00Z`);
 
-      if ((todayCount ?? 0) >= DAILY_LIMIT) {
+      if ((todayCount ?? 0) >= dailyLimit) {
         return json(429, {
           ok: false,
           error: "daily_limit_reached",
-          message: `You have used all ${DAILY_LIMIT} daily analyses. Resets at midnight UTC.`,
-          limit: DAILY_LIMIT,
+          message: `You have used all ${dailyLimit} daily analyses. Resets at midnight UTC.`,
+          limit: dailyLimit,
           used: todayCount,
         }, cors);
       }

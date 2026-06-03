@@ -14,6 +14,7 @@ import ConfidenceBar from '../components/ConfidenceBar'
 import SourceList from '../components/SourceList'
 import { getAnalysesByEventId, callVerifyAnalysis, deleteAnalysis } from '../services/analysisService'
 import { getEventById, deleteEvent } from '../services/eventService'
+import PageShell from '../components/PageShell'
 import Skeleton from '../components/Skeleton'
 
 function useLocale() {
@@ -52,7 +53,7 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) 
   const canVerify = analysis.status === 'pending' || analysis.status === 'failed'
 
   return (
-    <div className={`glass-panel overflow-hidden ${highlighted ? 'ring-2 ring-fin-accent/50' : ''}`}>
+    <div className={`glass-panel glass-panel-hover overflow-hidden transition-shadow duration-300 ${highlighted ? 'ring-2 ring-fin-accent/50 shadow-lg shadow-fin-accent/10' : ''}`}>
       {highlighted && (
         <div className="bg-fin-accent/10 border-b border-fin-accent/20 px-5 py-2 text-xs text-fin-accent font-medium flex items-center gap-1.5">
           <Sparkles size={12} />
@@ -100,7 +101,7 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) 
               <MessageSquare size={11} />
               {t('eventDetail.yourQuestion')}
             </div>
-            <p className="text-sm text-fin-text/90 leading-relaxed italic">"{analysis.question}"</p>
+            <p className="text-base text-fin-text/90 leading-relaxed italic">"{analysis.question}"</p>
           </div>
         )}
 
@@ -113,7 +114,7 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) 
         {/* AI Summary */}
         <div className="mb-4">
           <p className="text-xs text-fin-muted mb-1.5">{t('eventDetail.aiSummary')}</p>
-          <p className="text-sm text-fin-text leading-relaxed">{analysis.summary}</p>
+          <p className="text-base text-fin-text leading-relaxed">{analysis.summary}</p>
         </div>
 
         {/* Revalidation result */}
@@ -164,8 +165,8 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) 
 function DeleteModal({ onConfirm, onCancel, deleting }) {
   const { t } = useTranslation()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="glass-panel p-6 max-w-sm w-full space-y-4">
+    <div className="modal-overlay">
+      <div className="glass-panel modal-panel p-6 max-w-sm w-full space-y-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-fin-down/15 shrink-0">
             <Trash2 size={18} className="text-fin-down" />
@@ -286,7 +287,7 @@ export default function EventDetail() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-3xl">
+      <PageShell maxWidth="max-w-3xl">
         <div className="flex justify-between">
           <Skeleton className="w-20" />
           <Skeleton className="w-24" />
@@ -299,18 +300,18 @@ export default function EventDetail() {
           <Skeleton variant="rectangular" className="w-full h-40" />
           <Skeleton variant="rectangular" className="w-full h-40" />
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   if (error || !event) {
     return (
-      <div className="p-4 md:p-6">
-        <div className="flex items-center gap-2 p-4 rounded-lg bg-fin-down/10 border border-fin-down/30 text-fin-down text-sm">
+      <PageShell maxWidth="max-w-3xl">
+        <div className="alert-banner alert-error">
           <AlertCircle size={16} />
           {error ?? t('eventDetail.eventNotFound')}
         </div>
-      </div>
+      </PageShell>
     )
   }
 
@@ -324,7 +325,7 @@ export default function EventDetail() {
         />
       )}
 
-      <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-3xl">
+      <PageShell maxWidth="max-w-3xl">
         {/* Back + delete */}
         <div className="flex items-center justify-between">
           <button
@@ -353,11 +354,11 @@ export default function EventDetail() {
         )}
 
         {/* Event header */}
-        <div className="glass-panel p-4 md:p-5">
+        <div className="glass-panel glass-panel-hover p-4 md:p-5">
           <div className="flex items-start gap-4 flex-wrap">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-1 flex-wrap">
-                <h1 className="text-2xl font-bold font-mono text-fin-text">{event.asset_code}</h1>
+                <h1 className="text-2xl font-bold font-mono text-fin-text tracking-tight">{event.asset_code}</h1>
                 <DirectionBadge direction={event.direction} />
               </div>
               <p className="text-sm text-fin-muted">
@@ -381,12 +382,12 @@ export default function EventDetail() {
         {/* Analyses section */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-fin-text">
+            <h2 className="section-heading">
               {t('eventDetail.aiAnalyses', { count: analyses.length })}
             </h2>
             <button
               onClick={handleReAnalyse}
-              className="flex items-center gap-1.5 text-xs text-fin-accent hover:underline"
+              className="link-subtle flex items-center gap-1.5"
             >
               <Sparkles size={12} />
               {t('eventDetail.reAnalyse')}
@@ -394,7 +395,7 @@ export default function EventDetail() {
           </div>
 
           {verifyError && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-fin-down/10 border border-fin-down/30 text-fin-down text-sm mb-3">
+            <div className="alert-banner alert-error mb-3">
               <AlertCircle size={14} />
               {verifyError}
             </div>
@@ -409,7 +410,7 @@ export default function EventDetail() {
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 stagger-list">
               {analyses.map((an) => (
                 <AnalysisCard
                   key={an.id}
@@ -423,7 +424,7 @@ export default function EventDetail() {
             </div>
           )}
         </div>
-      </div>
+      </PageShell>
     </>
   )
 }

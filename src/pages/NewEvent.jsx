@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Sparkles, AlertCircle, ChevronRight, Zap, X, Gauge } from 'lucide-react'
-import { callAskFinoracle, getTodayAnalysisCount, DAILY_LIMIT } from '../services/analysisService'
+import { Sparkles, AlertCircle, ChevronRight, Zap, X, Gauge, PlusCircle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import PageShell from '../components/PageShell'
+import { callAskFinoracle, getTodayAnalysisCount } from '../services/analysisService'
 
 // ─── Asset inference (mirrors backend ASSET_PATTERNS) ────────────────────────
 const ASSET_PATTERNS = [
@@ -102,6 +104,7 @@ const QUESTION_TEMPLATES = [
 
 export default function NewEvent() {
   const { t } = useTranslation()
+  const { dailyLimit } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const prefill   = location.state?.prefill ?? null
@@ -160,8 +163,8 @@ export default function NewEvent() {
     setError(null)
 
     // Daily limit check
-    if (todayCount !== null && todayCount >= DAILY_LIMIT) {
-      return setError(t('newEvent.limitReached', { limit: DAILY_LIMIT }))
+    if (todayCount !== null && todayCount >= dailyLimit) {
+      return setError(t('newEvent.limitReached', { limit: dailyLimit }))
     }
 
     const resolvedAsset = form.asset_code.trim() || detected
@@ -200,220 +203,235 @@ export default function NewEvent() {
 
   const resolvedAsset = form.asset_code.trim() || detected
 
-  const limitReached = todayCount !== null && todayCount >= DAILY_LIMIT
+  const limitReached = todayCount !== null && todayCount >= dailyLimit
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-fin-text">{t('newEvent.title')}</h1>
-          <p className="text-sm text-fin-muted mt-0.5">{t('newEvent.subtitle')}</p>
-        </div>
-        {todayCount !== null && (
-          <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border shrink-0 ${
-            limitReached
-              ? 'border-fin-down/40 bg-fin-down/10 text-fin-down'
-              : 'border-fin-border text-fin-muted'
-          }`}>
-            <Gauge size={13} />
-            {t('newEvent.limitInfo', { used: todayCount, limit: DAILY_LIMIT })}
+    <PageShell maxWidth="max-w-4xl" className="flex flex-col items-center">
+      <div className="analysis-page w-full">
+        {/* Hero — centered, not left-stuck */}
+        <header className="analysis-hero mb-6 md:mb-8">
+          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-fin-accent/15 text-fin-accent mb-4">
+            <PlusCircle size={22} />
           </div>
-        )}
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
-        {/* Asset code */}
-        <div>
-          <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-            {t('newEvent.assetCode')}
-            <span className="ml-1 normal-case font-normal text-fin-muted/60">{t('newEvent.assetCodeOptional')}</span>
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={form.asset_code}
-              onChange={(e) => set('asset_code', e.target.value.toUpperCase())}
-              placeholder="e.g. BTC/USD, THYAO, USD/TRY"
-              className="input-field w-full font-mono pr-10"
-            />
-            {form.asset_code && (
-              <button
-                type="button"
-                onClick={() => set('asset_code', '')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fin-muted hover:text-fin-text transition-colors"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-
-          {/* Auto-detected badge */}
-          {!form.asset_code && detected && !dismissed && (
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-fin-accent/10 border border-fin-accent/30">
-              <Zap size={13} className="text-fin-accent shrink-0" />
-              <span className="text-xs text-fin-muted flex-1">
-                {t('newEvent.detected')}
-              </span>
-              <button
-                type="button"
-                onClick={acceptDetected}
-                className="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-fin-accent/20 text-fin-accent hover:bg-fin-accent/30 transition-colors"
-              >
-                {detected}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDismissed(true)}
-                className="text-fin-muted/60 hover:text-fin-muted transition-colors"
-              >
-                <X size={12} />
-              </button>
+          <h1 className="text-2xl md:text-[1.75rem] font-bold text-fin-text tracking-tight">
+            {t('newEvent.title')}
+          </h1>
+          <p className="text-base text-fin-muted mt-2 max-w-md mx-auto leading-relaxed">
+            {t('newEvent.subtitle')}
+          </p>
+          {todayCount !== null && (
+            <div
+              className={`inline-flex items-center gap-1.5 text-sm px-3.5 py-1.5 rounded-full border mt-4 transition-colors duration-200 ${
+                limitReached
+                  ? 'border-fin-down/40 bg-fin-down/10 text-fin-down'
+                  : 'border-fin-border/80 bg-fin-card/60 text-fin-muted'
+              }`}
+            >
+              <Gauge size={13} />
+              {t('newEvent.limitInfo', { used: todayCount, limit: dailyLimit })}
             </div>
           )}
+        </header>
 
-          {/* Quick-pick chips */}
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {ASSET_SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => set('asset_code', s)}
-                className={`px-2.5 py-0.5 rounded text-xs font-mono transition-colors ${
-                  form.asset_code === s
-                    ? 'bg-fin-accent/20 text-fin-accent border border-fin-accent/40'
-                    : 'bg-fin-border/40 text-fin-muted hover:text-fin-text hover:bg-fin-border'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Date + Direction + Magnitude */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              {t('newEvent.eventDate')}
+        <form onSubmit={handleSubmit} className="analysis-form-card w-full">
+          {/* 1 — Question */}
+          <section className="analysis-section analysis-section-primary">
+            <label className="analysis-field-label" htmlFor="analysis-question">
+              {t('newEvent.questionLabel')}
             </label>
-            <input
-              type="date"
-              value={form.event_date}
-              onChange={(e) => set('event_date', e.target.value)}
-              className="input-field w-full text-sm"
+            <textarea
+              id="analysis-question"
+              value={form.question}
+              onChange={(e) => set('question', e.target.value)}
+              placeholder="e.g. Why did Turkish Airlines stock rise on March 20 2026?"
+              rows={5}
+              className="input-field w-full analysis-question-input"
               required
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              {t('newEvent.direction')}
-            </label>
-            <div className="flex gap-2">
-              {['up', 'down'].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => set('direction', d)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-                    form.direction === d
-                      ? d === 'up'
-                        ? 'bg-fin-up/20 border-fin-up text-fin-up'
-                        : 'bg-fin-down/20 border-fin-down text-fin-down'
-                      : 'border-fin-border text-fin-muted hover:border-fin-muted'
-                  }`}
-                >
-                  {d === 'up' ? t('newEvent.dirUp') : t('newEvent.dirDown')}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-              {t('newEvent.magnitude')} <span className="normal-case font-normal">{t('newEvent.magnitudeOptional')}</span>
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.magnitude}
-              onChange={(e) => set('magnitude', e.target.value)}
-              placeholder="e.g. -3.5"
-              className="input-field w-full text-sm font-mono"
-            />
-          </div>
-        </div>
-
-        {/* Question */}
-        <div>
-          <label className="block text-xs font-medium text-fin-muted uppercase tracking-wide mb-1.5">
-            {t('newEvent.questionLabel')}
-          </label>
-          <textarea
-            value={form.question}
-            onChange={(e) => set('question', e.target.value)}
-            placeholder="e.g. Why did Turkish Airlines stock rise on March 20 2026?"
-            rows={3}
-            className="input-field w-full text-sm resize-none"
-            required
-          />
-          <div className="mt-2 space-y-1">
-            <p className="text-xs text-fin-muted">{t('newEvent.quickTemplates')}</p>
-            <div className="flex flex-col gap-1">
+            <p className="text-xs text-fin-muted mt-4 mb-2">{t('newEvent.quickTemplates')}</p>
+            <div className="grid gap-1.5 sm:grid-cols-1">
               {QUESTION_TEMPLATES.map((tpl) => (
                 <button
                   key={tpl}
                   type="button"
                   onClick={() => fillTemplate(tpl)}
-                  className="text-left text-xs text-fin-muted/70 hover:text-fin-accent transition-colors truncate"
+                  className="analysis-template-btn"
                 >
-                  → {tpl
-                      .replace('{asset}', resolvedAsset ?? 'the asset')
-                      .replace('{direction}', form.direction)
-                      .replace('{date}', form.event_date)}
+                  {tpl
+                    .replace('{asset}', resolvedAsset ?? 'the asset')
+                    .replace('{direction}', form.direction)
+                    .replace('{date}', form.event_date)}
                 </button>
               ))}
             </div>
-          </div>
-        </div>
+          </section>
 
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-fin-down/10 border border-fin-down/30 text-fin-down text-sm">
-            <AlertCircle size={15} className="shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading || limitReached}
-          className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <>
-              <Sparkles size={16} className="animate-pulse" />
-              {t('newEvent.analysing')}
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              {t('newEvent.submit')}
-              {resolvedAsset && (
-                <span className="ml-1 px-2 py-0.5 rounded font-mono text-xs bg-white/10">
-                  {resolvedAsset}
-                </span>
+          {/* 2 — Asset */}
+          <section className="analysis-section">
+            <label className="analysis-field-label" htmlFor="analysis-asset">
+              {t('newEvent.assetCode')}
+              <span className="ml-1 normal-case font-normal text-fin-muted/55 tracking-normal">
+                {t('newEvent.assetCodeOptional')}
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                id="analysis-asset"
+                type="text"
+                value={form.asset_code}
+                onChange={(e) => set('asset_code', e.target.value.toUpperCase())}
+                placeholder="e.g. BTC/USD, THYAO, USD/TRY"
+                className="input-field w-full font-mono text-sm pr-10"
+              />
+              {form.asset_code && (
+                <button
+                  type="button"
+                  onClick={() => set('asset_code', '')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fin-muted hover:text-fin-text transition-colors p-1 rounded"
+                  aria-label="Clear asset"
+                >
+                  <X size={14} />
+                </button>
               )}
-              <ChevronRight size={15} />
-            </>
-          )}
-        </button>
+            </div>
 
-        {loading && (
-          <p className="text-xs text-center text-fin-muted animate-pulse">
-            {t('newEvent.analysingHint')}
-          </p>
-        )}
-      </form>
-    </div>
+            {!form.asset_code && detected && !dismissed && (
+              <div className="flex items-center gap-2 mt-3 p-3 rounded-lg bg-fin-accent/10 border border-fin-accent/30 animate-fade-in-up">
+                <Zap size={14} className="text-fin-accent shrink-0" />
+                <span className="text-xs text-fin-muted flex-1 leading-snug">
+                  {t('newEvent.detected')}
+                </span>
+                <button
+                  type="button"
+                  onClick={acceptDetected}
+                  className="px-3 py-1 rounded-md text-xs font-mono font-semibold bg-fin-accent/20 text-fin-accent hover:bg-fin-accent/30 transition-colors"
+                >
+                  {detected}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDismissed(true)}
+                  className="text-fin-muted/60 hover:text-fin-muted transition-colors p-1"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+              {ASSET_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => set('asset_code', s)}
+                  className={`chip ${form.asset_code === s ? 'chip-active' : 'chip-inactive'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* 3 — Event context */}
+          <section className="analysis-section">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="analysis-field-label" htmlFor="analysis-date">
+                  {t('newEvent.eventDate')}
+                </label>
+                <input
+                  id="analysis-date"
+                  type="date"
+                  value={form.event_date}
+                  onChange={(e) => set('event_date', e.target.value)}
+                  className="input-field w-full text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <span className="analysis-field-label block">{t('newEvent.direction')}</span>
+                <div className="flex gap-2">
+                  {['up', 'down'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => set('direction', d)}
+                      className={`flex-1 min-h-[2.5rem] rounded-lg text-sm font-semibold border transition-all duration-200 ${
+                        form.direction === d
+                          ? d === 'up'
+                            ? 'bg-fin-up/20 border-fin-up text-fin-up shadow-sm shadow-fin-up/10'
+                            : 'bg-fin-down/20 border-fin-down text-fin-down shadow-sm shadow-fin-down/10'
+                          : 'border-fin-border text-fin-muted hover:border-fin-muted/80 hover:bg-fin-border/20'
+                      }`}
+                    >
+                      {d === 'up' ? t('newEvent.dirUp') : t('newEvent.dirDown')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="analysis-field-label" htmlFor="analysis-magnitude">
+                  {t('newEvent.magnitude')}{' '}
+                  <span className="normal-case font-normal tracking-normal text-fin-muted/55">
+                    {t('newEvent.magnitudeOptional')}
+                  </span>
+                </label>
+                <input
+                  id="analysis-magnitude"
+                  type="number"
+                  step="0.01"
+                  value={form.magnitude}
+                  onChange={(e) => set('magnitude', e.target.value)}
+                  placeholder="e.g. -3.5"
+                  className="input-field w-full text-sm font-mono"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Submit */}
+          <section className="analysis-submit-section">
+            {error && (
+              <div className="alert-banner alert-error mb-4">
+                <AlertCircle size={15} className="shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || limitReached}
+              className="btn-primary w-full flex items-center justify-center gap-2 py-3.5 text-base rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <Sparkles size={18} className="animate-pulse" />
+                  {t('newEvent.analysing')}
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} />
+                  {t('newEvent.submit')}
+                  {resolvedAsset && (
+                    <span className="ml-1 px-2.5 py-0.5 rounded-md font-mono text-xs bg-white/15">
+                      {resolvedAsset}
+                    </span>
+                  )}
+                  <ChevronRight size={16} />
+                </>
+              )}
+            </button>
+
+            {loading && (
+              <p className="text-xs text-center text-fin-muted mt-3 animate-pulse leading-relaxed">
+                {t('newEvent.analysingHint')}
+              </p>
+            )}
+          </section>
+        </form>
+      </div>
+    </PageShell>
   )
 }

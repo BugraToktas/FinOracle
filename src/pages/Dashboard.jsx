@@ -7,6 +7,8 @@ import {
 } from 'recharts'
 import { Activity, Clock, BarChart2, Star, ChevronRight, TrendingUp, Sparkles } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import PageShell from '../components/PageShell'
+import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
@@ -53,15 +55,10 @@ export default function Dashboard() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-fin-text">{t('dashboard.title')}</h1>
-        <p className="text-sm text-fin-muted mt-0.5">{t('dashboard.subtitle')}</p>
-      </div>
+    <PageShell>
+      <PageHeader title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} />
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 stagger-list">
         <StatCard
           label={t('dashboard.totalEvents')}
           value={loading ? '—' : (stats?.totalEvents ?? 0)}
@@ -89,16 +86,15 @@ export default function Dashboard() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Confidence trend */}
-        <div className="glass-panel p-5">
-          <h2 className="text-sm font-semibold text-fin-text mb-4">{t('dashboard.confidenceTrend')}</h2>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 stagger-list">
+        <div className="glass-panel glass-panel-hover p-5">
+          <h2 className="section-heading mb-4">{t('dashboard.confidenceTrend')}</h2>
           {loading || trendData.length === 0 ? (
-            <div className="flex items-center justify-center h-36 text-fin-muted text-sm">
+            <div className="flex items-center justify-center h-56 text-fin-muted text-sm">
               {loading ? t('common.loading') : '—'}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={trendData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis
@@ -128,14 +124,14 @@ export default function Dashboard() {
         </div>
 
         {/* Asset breakdown */}
-        <div className="glass-panel p-5">
-          <h2 className="text-sm font-semibold text-fin-text mb-4">{t('dashboard.assetBreakdown')}</h2>
+        <div className="glass-panel glass-panel-hover p-5">
+          <h2 className="section-heading mb-4">{t('dashboard.assetBreakdown')}</h2>
           {loading || assetData.length === 0 ? (
-            <div className="flex items-center justify-center h-36 text-fin-muted text-sm">
+            <div className="flex items-center justify-center h-56 text-fin-muted text-sm">
               {loading ? t('common.loading') : '—'}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={assetData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="asset" tick={{ fill: '#6b7280', fontSize: 10 }} />
@@ -158,8 +154,8 @@ export default function Dashboard() {
       {/* Recent events table */}
       <div className="glass-panel overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-fin-border">
-          <h2 className="text-sm font-semibold text-fin-text">{t('dashboard.recentEvents')}</h2>
-          <button onClick={() => navigate('/events')} className="text-xs text-fin-accent hover:underline">
+          <h2 className="section-heading">{t('dashboard.recentEvents')}</h2>
+          <button onClick={() => navigate('/events')} className="link-subtle">
             {t('dashboard.viewAll')}
           </button>
         </div>
@@ -184,7 +180,7 @@ export default function Dashboard() {
                 t('dashboard.welcomeStep3'),
               ].map((step, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full bg-fin-accent/20 text-fin-accent text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="w-5 h-5 rounded-full bg-fin-accent/20 text-fin-accent text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}
                   </span>
                   {step}
@@ -210,7 +206,7 @@ export default function Dashboard() {
                   <div
                     key={ev.id}
                     onClick={() => navigate(`/events/${ev.id}`)}
-                    className="p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-fin-border/10 transition-colors"
+                    className="p-4 flex items-center justify-between gap-3 cursor-pointer card-interactive"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="min-w-0">
@@ -265,7 +261,7 @@ export default function Dashboard() {
                       <tr
                         key={ev.id}
                         onClick={() => navigate(`/events/${ev.id}`)}
-                        className="border-b border-fin-border/30 hover:bg-fin-border/10 cursor-pointer transition-colors"
+                        className="border-b border-fin-border/30 cursor-pointer table-row-hover"
                       >
                         <td className="px-5 py-3 font-mono font-semibold text-fin-text">{ev.asset_code}</td>
                         <td className="px-5 py-3 text-fin-muted font-mono text-xs">
@@ -296,6 +292,6 @@ export default function Dashboard() {
           </>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }

@@ -6,6 +6,8 @@ import { format } from 'date-fns'
 import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
 import ConfidenceBar from '../components/ConfidenceBar'
+import PageShell from '../components/PageShell'
+import PageHeader from '../components/PageHeader'
 import Skeleton from '../components/Skeleton'
 import { getAllEvents } from '../services/eventService'
 
@@ -59,29 +61,27 @@ export default function Events() {
   const hasFilters = filters.assetCode || filters.direction || filters.status || filters.from || filters.to
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-fin-text">{t('events.title')}</h1>
-          <p className="text-sm text-fin-muted mt-0.5">
-            {loading
-              ? t('common.loading')
-              : t('events.subtitleCount_other', { count: events.length })}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/new-event')}
-          className="btn-primary flex items-center gap-2 text-sm shrink-0"
-        >
-          <PlusCircle size={15} />
-          <span className="hidden sm:inline">{t('events.newEvent')}</span>
-          <span className="sm:hidden">{t('common.new')}</span>
-        </button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title={t('events.title')}
+        subtitle={
+          loading
+            ? t('common.loading')
+            : t('events.subtitleCount_other', { count: events.length })
+        }
+        actions={
+          <button
+            onClick={() => navigate('/new-event')}
+            className="btn-primary flex items-center gap-2 text-sm shrink-0"
+          >
+            <PlusCircle size={15} />
+            <span className="hidden sm:inline">{t('events.newEvent')}</span>
+            <span className="sm:hidden">{t('common.new')}</span>
+          </button>
+        }
+      />
 
-      {/* Filters */}
-      <div className="glass-panel p-4">
+      <div className="glass-panel glass-panel-hover p-4">
         <div className="flex items-center gap-2 mb-3 text-xs text-fin-muted font-medium uppercase tracking-wide">
           <Filter size={12} />
           {t('events.filters')}
@@ -146,7 +146,7 @@ export default function Events() {
 
       {/* Content */}
       {error ? (
-        <div className="glass-panel p-6 text-fin-down text-sm">{error}</div>
+        <div className="alert-banner alert-error">{error}</div>
       ) : loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map(i => (
@@ -164,7 +164,7 @@ export default function Events() {
       ) : (
         <>
           {/* ── Mobile card list (hidden on sm+) ─────────────────── */}
-          <div className="sm:hidden space-y-2">
+          <div className="sm:hidden space-y-2 stagger-list">
             {events.map((ev) => {
               const analyses = ev.analysis_results ?? []
               const latest   = analyses[analyses.length - 1] ?? null
@@ -172,7 +172,7 @@ export default function Events() {
                 <div
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
-                  className="glass-panel p-4 cursor-pointer active:scale-[0.99] transition-transform"
+                  className="glass-panel card-interactive p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col min-w-0">
@@ -183,7 +183,7 @@ export default function Events() {
                         <DirectionBadge direction={ev.direction} />
                       </div>
                       {latest?.question && (
-                        <p className="text-xs text-fin-muted/70 italic truncate mt-1 max-w-[200px]">
+                        <p className="text-xs text-fin-muted/70 italic truncate mt-1 max-w-[460px]">
                           "{latest.question}"
                         </p>
                       )}
@@ -251,12 +251,12 @@ export default function Events() {
                       <tr
                         key={ev.id}
                         onClick={() => navigate(`/events/${ev.id}`)}
-                        className="border-b border-fin-border/30 hover:bg-fin-border/10 cursor-pointer transition-colors"
+                        className="border-b border-fin-border/30 cursor-pointer table-row-hover"
                       >
                         <td className="px-5 py-3 text-fin-text">
                           <span className="font-mono font-semibold">{ev.asset_code}</span>
                           {latest?.question && (
-                            <p className="text-xs text-fin-muted/70 italic truncate max-w-[180px] mt-0.5">
+                            <p className="text-xs text-fin-muted/70 italic truncate max-w-[560px] mt-0.5">
                               "{latest.question}"
                             </p>
                           )}
@@ -296,6 +296,6 @@ export default function Events() {
           </div>
         </>
       )}
-    </div>
+    </PageShell>
   )
 }

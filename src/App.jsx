@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import LoadingSpinner from './components/LoadingSpinner'
 import Layout from './components/Layout'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -14,13 +15,7 @@ import NotFound from './pages/NotFound'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-fin-bg">
-        <div className="w-6 h-6 border-2 border-fin-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <LoadingSpinner />
   if (!user) return <Navigate to="/login" replace />
   return children
 }
@@ -35,9 +30,7 @@ function AppRoutes() {
         path="/"
         element={
           loading
-            ? <div className="min-h-screen flex items-center justify-center bg-fin-bg">
-                <div className="w-6 h-6 border-2 border-fin-accent border-t-transparent rounded-full animate-spin" />
-              </div>
+            ? <LoadingSpinner />
             : user
               ? <Navigate to="/dashboard" replace />
               : <Landing />

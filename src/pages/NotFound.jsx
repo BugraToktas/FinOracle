@@ -7,9 +7,9 @@ export default function NotFound() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-fin-bg flex items-center justify-center p-6">
-      <div className="text-center space-y-5 max-w-sm">
-        <p className="text-7xl font-bold font-mono text-fin-accent/30">404</p>
+    <div className="min-h-screen bg-fin-bg flex items-center justify-center p-6 page-enter">
+      <div className="text-center space-y-5 max-w-sm glass-panel glass-panel-hover p-8">
+        <p className="text-7xl font-bold font-mono text-fin-accent/30 animate-glow">404</p>
         <h1 className="text-xl font-bold text-fin-text">{t('notFound.title')}</h1>
         <p className="text-sm text-fin-muted leading-relaxed">{t('notFound.desc')}</p>
         <div className="flex items-center justify-center gap-3">
