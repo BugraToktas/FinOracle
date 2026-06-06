@@ -5,7 +5,7 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { Activity, Clock, BarChart2, Star, ChevronRight, TrendingUp, Sparkles } from 'lucide-react'
+import { Activity, Clock, BarChart2, Star, ChevronRight, TrendingUp, Sparkles, AlertCircle } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import PageShell from '../components/PageShell'
 import PageHeader from '../components/PageHeader'
@@ -29,9 +29,11 @@ export default function Dashboard() {
   const [trendData, setTrendData]   = useState([])
   const [assetData, setAssetData]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
 
   async function load() {
     setLoading(true)
+    setError(null)
     try {
       const [s, ev, src, trend, assets] = await Promise.all([
         getEventStats(),
@@ -47,6 +49,7 @@ export default function Dashboard() {
       setAssetData(assets)
     } catch (err) {
       console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -57,6 +60,19 @@ export default function Dashboard() {
   return (
     <PageShell>
       <PageHeader title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} />
+
+      {error && (
+        <div className="alert-banner alert-error" role="alert">
+          <AlertCircle size={16} className="shrink-0" />
+          <span>{error}</span>
+          <button
+            onClick={load}
+            className="ml-auto text-xs underline hover:no-underline shrink-0"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 stagger-list">
         <StatCard

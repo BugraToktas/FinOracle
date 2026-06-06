@@ -12,6 +12,7 @@ import PageShell from '../components/PageShell'
 import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import {
   adminGetUsers,
   adminGetQueueStats,
@@ -24,7 +25,8 @@ import {
 export default function Admin() {
   const { t, i18n } = useTranslation()
   const locale = i18n.language === 'tr' ? tr : enUS
-  const { isAdmin, loading: authLoading } = useAuth()
+  const { isAdmin, loading: authLoading, user } = useAuth()
+  const { addToast } = useToast()
   const navigate = useNavigate()
 
   const [users, setUsers]           = useState([])
@@ -42,11 +44,12 @@ export default function Admin() {
   const [editingLimit, setEditingLimit]             = useState(10)
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState(null)
   const [confirmDeleteEmail, setConfirmDeleteEmail]   = useState('')
+  // custom confirm modal for toggle-admin (replaces window.confirm)
+  const [confirmToggle, setConfirmToggle]             = useState(null) // { user, nextAdminState }
   const [selectedUserForAnalyses, setSelectedUserForAnalyses] = useState(null)
   const [selectedUserAnalyses, setSelectedUserAnalyses]       = useState([])
   const [loadingAnalyses, setLoadingAnalyses]                 = useState(false)
   const [savingUserId, setSavingUserId]                       = useState(null)
-  const [successMessage, setSuccessMessage]                   = useState(null)
 
   // Guard: non-admins are redirected (wait for auth to finish loading first)
   useEffect(() => {
@@ -86,14 +89,13 @@ export default function Admin() {
 
   async function handleUpdateLimit(userId, isUserAdmin) {
     setSavingUserId(userId)
-    setSuccessMessage(null)
     try {
       await adminUpdateUser(userId, isUserAdmin, editingLimit)
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, daily_limit: editingLimit } : u))
       )
       setEditingUserId(null)
-      triggerNotification(t('admin.limitUpdated'))
+      addToast(t('admin.limitUpdated'))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -101,27 +103,26 @@ export default function Admin() {
     }
   }
 
-  async function handleToggleAdmin(user) {
-    const nextAdminState = !user.is_admin
-    const confirmMsg = nextAdminState
-      ? `${user.email} kullanıcısını yönetici yapmak istediğinize emin misiniz?`
-      : `${user.email} kullanıcısının yöneticilik yetkisini kaldırmak istediğinize emin misiniz?`
+  // window.confirm yerine custom modal kullanılıyor
+  function handleToggleAdminRequest(user) {
+    setConfirmToggle({ user, nextAdminState: !user.is_admin })
+  }
 
-    if (!window.confirm(confirmMsg)) return
-
+  async function handleToggleAdminConfirm() {
+    if (!confirmToggle) return
+    const { user, nextAdminState } = confirmToggle
+    setConfirmToggle(null)
     setSavingUserId(user.id)
-    setSuccessMessage(null)
     try {
       await adminUpdateUser(user.id, nextAdminState, user.daily_limit)
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, is_admin: nextAdminState } : u))
       )
-      triggerNotification(t('admin.userUpdated'))
+      addToast(t('admin.userUpdated'))
     } catch (err) {
       setError(err.message)
     } finally {
-      setSavingUserId(user.id)
-      setSavingUserId(null)
+      setSavingUserId(null) // bug fix: önceki kodda setSavingUserId(user.id) gereksiz yere çağrılıyordu
     }
   }
 
@@ -133,7 +134,7 @@ export default function Admin() {
       setUsers((prev) => prev.filter((u) => u.id !== userId))
       setConfirmDeleteUserId(null)
       setConfirmDeleteEmail('')
-      triggerNotification(t('admin.userDeleted'))
+      addToast(t('admin.userDeleted'))
     } catch (err) {
       setError(err.message)
       setConfirmDeleteUserId(null)
@@ -157,11 +158,10 @@ export default function Admin() {
     }
   }
 
+  // triggerNotification artık sadece inline banner için (toast global context'e taşındı)
   function triggerNotification(msg) {
     setSuccessMessage(msg)
-    setTimeout(() => {
-      setSuccessMessage(null)
-    }, 4000)
+    setTimeout(() => { setSuccessMessage(null) }, 4000)
   }
 
   // Filter users list based on search query
@@ -184,15 +184,8 @@ export default function Admin() {
         icon={ShieldCheck}
       />
 
-      {successMessage && (
-        <div className="toast-success">
-          <CheckCircle size={16} className="shrink-0" />
-          {successMessage}
-        </div>
-      )}
-
       {error && (
-        <div className="alert-banner alert-error">
+        <div className="alert-banner alert-error" role="alert">
           <AlertCircle size={16} className="shrink-0" />
           <span className="flex-1">{error}</span>
           <button onClick={() => setError(null)} className="ml-auto p-1 opacity-70 hover:opacity-100 transition-opacity">
@@ -369,7 +362,7 @@ export default function Admin() {
 
                   <div className="flex justify-end gap-2 pt-2 border-t border-fin-border/20">
                     <button
-                      onClick={() => handleToggleAdmin(u)}
+                      onClick={() => handleToggleAdminRequest(u)}
                       className="text-xs px-2 py-1 rounded bg-fin-border/60 hover:bg-fin-border text-fin-text transition-colors"
                       disabled={savingUserId !== null}
                     >
@@ -486,7 +479,7 @@ export default function Admin() {
                       <td className="px-5 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleToggleAdmin(u)}
+                            onClick={() => handleToggleAdminRequest(u)}
                             className="text-xs px-2.5 py-1.5 rounded-lg border border-fin-border/60 hover:bg-fin-border/20 text-fin-text transition-all"
                             disabled={savingUserId !== null}
                           >
@@ -584,6 +577,47 @@ export default function Admin() {
                 className="btn-secondary text-xs px-4 py-2"
               >
                 {t('admin.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Toggle Admin Modal */}
+      {confirmToggle && (
+        <div className="modal-overlay">
+          <div className="glass-panel modal-panel w-full max-w-md p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-fin-accent/10 text-fin-accent shrink-0">
+                <Crown size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-fin-text">
+                  {confirmToggle.nextAdminState ? t('admin.promoteAdmin') : t('admin.demoteAdmin')}
+                </h3>
+                <p className="text-sm text-fin-muted mt-1 leading-relaxed">
+                  {confirmToggle.nextAdminState
+                    ? t('admin.promoteConfirm', { email: confirmToggle.user.email })
+                    : t('admin.demoteConfirm',  { email: confirmToggle.user.email })
+                  }
+                </p>
+                <p className="text-xs text-fin-muted/70 font-mono mt-2 bg-fin-border/20 p-2 rounded truncate">
+                  {confirmToggle.user.email}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setConfirmToggle(null)}
+                className="btn-secondary text-xs px-4 py-2"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleToggleAdminConfirm}
+                className="btn-primary text-xs px-4 py-2"
+              >
+                {t('common.confirm')}
               </button>
             </div>
           </div>

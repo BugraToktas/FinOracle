@@ -24,9 +24,16 @@ export default {
     signingIn: 'Signing in…',
     signingUp: 'Creating account…',
     errorGeneric: 'Authentication failed. Please try again.',
+    errorWrongCredentials: 'Incorrect email or password.',
+    errorEmailNotConfirmed: 'Please confirm your email address first.',
+    errorAlreadyRegistered: 'This email is already registered.',
+    errorRateLimit: 'Too many attempts. Please wait a moment.',
+    errorWeakPassword: 'Password is too weak. Use at least 8 characters.',
     orContinueWith: 'Or continue with',
     continueGoogle: 'Continue with Google',
     signUpSuccess: 'Check your email for the confirmation link.',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
   },
   // Dashboard
   dashboard: {
@@ -86,6 +93,7 @@ export default {
     none: 'none',
     newEvent: 'New Event',
     noEvents: 'No events match your filters.',
+    noEventsHint: 'Try clearing your filters or add a new analysis.',
   },
   // New Event
   newEvent: {
@@ -149,6 +157,8 @@ export default {
     eventNotFound: 'Event not found.',
     deleteEvent: 'Delete Event',
     deleteAnalysis: 'Delete this analysis',
+    deleteAnalysisConfirm: 'Are you sure you want to delete this analysis? This cannot be undone.',
+    analysisDeleted: 'Analysis deleted.',
     deleteConfirm: 'Delete this event and all its analyses? This cannot be undone.',
     deleteConfirmYes: 'Delete',
     deleteConfirmNo: 'Cancel',
@@ -259,6 +269,8 @@ export default {
     deleteConfirm: 'Are you sure you want to delete this user and all their data? This action cannot be undone.',
     promoteAdmin: 'Make Admin',
     demoteAdmin: 'Remove Admin',
+    promoteConfirm: 'Are you sure you want to make {{email}} an admin?',
+    demoteConfirm: 'Are you sure you want to remove admin privileges from {{email}}?',
     limitUpdated: 'User limit updated successfully.',
     userDeleted: 'User deleted successfully.',
     userUpdated: 'User updated successfully.',
@@ -272,6 +284,8 @@ export default {
   common: {
     loading: 'Loading…',
     error: 'Something went wrong.',
+    retry: 'Retry',
+    confirm: 'Confirm',
     save: 'Save',
     cancel: 'Cancel',
     view: 'View →',

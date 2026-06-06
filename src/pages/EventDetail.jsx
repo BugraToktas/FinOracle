@@ -16,6 +16,7 @@ import { getAnalysesByEventId, callVerifyAnalysis, deleteAnalysis } from '../ser
 import { getEventById, deleteEvent } from '../services/eventService'
 import PageShell from '../components/PageShell'
 import Skeleton from '../components/Skeleton'
+import { useToast } from '../context/ToastContext'
 
 function useLocale() {
   const { i18n } = useTranslation()
@@ -213,6 +214,10 @@ export default function EventDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deletingAnalysisId, setDeletingAnalysisId] = useState(null)
+  // analiz silme için confirm modal
+  const [confirmDeleteAnalysisId, setConfirmDeleteAnalysisId] = useState(null)
+
+  const { addToast } = useToast()
 
   async function load() {
     setLoading(true)
@@ -248,9 +253,11 @@ export default function EventDetail() {
 
   async function handleDeleteAnalysis(analysisId) {
     setDeletingAnalysisId(analysisId)
+    setConfirmDeleteAnalysisId(null)
     try {
       await deleteAnalysis(analysisId)
       setAnalyses((prev) => prev.filter((a) => a.id !== analysisId))
+      addToast(t('eventDetail.analysisDeleted'))
     } catch (err) {
       setVerifyError(err.message)
     } finally {
@@ -317,6 +324,37 @@ export default function EventDetail() {
 
   return (
     <>
+      {/* Analiz silme onay modalı */}
+      {confirmDeleteAnalysisId && (
+        <div className="modal-overlay">
+          <div className="glass-panel modal-panel p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-fin-down/15 shrink-0">
+                <Trash2 size={18} className="text-fin-down" />
+              </div>
+              <h2 className="text-base font-semibold text-fin-text">{t('eventDetail.deleteAnalysis')}</h2>
+            </div>
+            <p className="text-sm text-fin-muted leading-relaxed">{t('eventDetail.deleteAnalysisConfirm')}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDeleteAnalysisId(null)}
+                className="btn-secondary text-sm px-4"
+              >
+                {t('eventDetail.deleteConfirmNo')}
+              </button>
+              <button
+                onClick={() => handleDeleteAnalysis(confirmDeleteAnalysisId)}
+                disabled={deletingAnalysisId !== null}
+                className="flex items-center gap-1.5 bg-fin-down hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors duration-200"
+              >
+                {deletingAnalysisId === confirmDeleteAnalysisId && <RefreshCw size={12} className="animate-spin" />}
+                <Trash2 size={13} />{t('eventDetail.deleteConfirmYes')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteModal && (
         <DeleteModal
           onConfirm={handleDelete}
@@ -329,7 +367,10 @@ export default function EventDetail() {
         {/* Back + delete */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (window.history.state?.idx > 0) navigate(-1)
+              else navigate('/events')
+            }}
             className="flex items-center gap-1.5 text-sm text-fin-muted hover:text-fin-text transition-colors"
           >
             <ArrowLeft size={15} />
@@ -418,7 +459,7 @@ export default function EventDetail() {
                   highlighted={an.id === freshAnalysisId}
                   onVerify={handleVerify}
                   verifying={verifyingId === an.id}
-                  onDelete={handleDeleteAnalysis}
+                  onDelete={setConfirmDeleteAnalysisId}
                 />
               ))}
             </div>

@@ -5,6 +5,22 @@ import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import Logo from '../components/Logo'
 import { supabase } from '../lib/supabaseClient'
 
+/** Map raw Supabase auth errors to user-friendly i18n keys */
+function mapAuthError(err, t) {
+  const msg = (err?.message ?? '').toLowerCase()
+  if (msg.includes('invalid login credentials') || msg.includes('invalid credentials'))
+    return t('auth.errorWrongCredentials')
+  if (msg.includes('email not confirmed'))
+    return t('auth.errorEmailNotConfirmed')
+  if (msg.includes('user already registered') || msg.includes('already registered'))
+    return t('auth.errorAlreadyRegistered')
+  if (msg.includes('rate limit') || msg.includes('too many requests'))
+    return t('auth.errorRateLimit')
+  if (msg.includes('weak password') || msg.includes('password'))
+    return t('auth.errorWeakPassword')
+  return t('auth.errorGeneric')
+}
+
 export default function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -34,17 +50,19 @@ export default function Login() {
         setSuccess(t('auth.signUpSuccess'))
       }
     } catch (err) {
-      setError(err.message || t('auth.errorGeneric'))
+      setError(mapAuthError(err, t))
     } finally {
       setLoading(false)
     }
   }
 
   async function handleGoogle() {
-    await supabase.auth.signInWithOAuth({
+    setError(null)
+    const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin + '/dashboard' },
     })
+    if (err) setError(mapAuthError(err, t))
   }
 
   return (
@@ -71,9 +89,10 @@ export default function Login() {
           {/* Google OAuth */}
           <button
             onClick={handleGoogle}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-fin-border text-sm text-fin-text hover:bg-fin-border/20 hover:border-fin-muted/50 transition-all duration-200 mb-5"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg border border-fin-border text-sm text-fin-text hover:bg-fin-border/20 hover:border-fin-muted/50 transition-all duration-200 mb-5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg width="18" height="18" viewBox="0 0 18 18">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
               <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
               <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
               <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
@@ -94,10 +113,15 @@ export default function Login() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-fin-muted mb-1.5">{t('auth.email')}</label>
+              {/* htmlFor + id bağlantısı düzeltildi (a11y) */}
+              <label htmlFor="login-email" className="block text-xs text-fin-muted mb-1.5">
+                {t('auth.email')}
+              </label>
               <input
+                id="login-email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -106,11 +130,15 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-xs text-fin-muted mb-1.5">{t('auth.password')}</label>
+              <label htmlFor="login-password" className="block text-xs text-fin-muted mb-1.5">
+                {t('auth.password')}
+              </label>
               <div className="relative">
                 <input
+                  id="login-password"
                   type={showPw ? 'text' : 'password'}
                   required
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -119,6 +147,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPw(v => !v)}
+                  aria-label={showPw ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-fin-muted hover:text-fin-text transition-colors"
                 >
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -127,14 +156,14 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="alert-banner alert-error text-xs">
+              <div className="alert-banner alert-error text-xs" role="alert">
                 <AlertCircle size={13} />
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="alert-banner alert-success text-xs">
+              <div className="alert-banner alert-success text-xs" role="status">
                 {success}
               </div>
             )}

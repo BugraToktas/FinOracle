@@ -124,13 +124,20 @@ export async function getTodayAnalysisCount() {
   const { data, error } = await supabase.rpc('get_today_analysis_count')
   if (!error && typeof data === 'number') return data
 
-  // Fallback: global count (before migration is applied)
+  // Fallback: per-user count with explicit user_id filter
+  // (bugfix: previously counted all users globally, now scoped to current user)
+  const { data: authData } = await supabase.auth.getUser()
+  const uid = authData?.user?.id
+  if (!uid) return 0
+
   const todayUtc = new Date().toISOString().split('T')[0]
+  const tomorrow = new Date(Date.now() + 86400_000).toISOString().split('T')[0]
   const { count } = await supabase
     .from('analysis_results')
     .select('id', { count: 'exact', head: true })
+    .eq('user_id', uid)
     .gte('created_at', `${todayUtc}T00:00:00Z`)
-    .lt('created_at',  `${todayUtc}T23:59:59Z`)
+    .lt('created_at',  `${tomorrow}T00:00:00Z`)
   return count ?? 0
 }
 

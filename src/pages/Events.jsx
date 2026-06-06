@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Search, Filter, PlusCircle, ChevronRight } from 'lucide-react'
+import { Search, Filter, PlusCircle, ChevronRight, Sparkles } from 'lucide-react'
 import { format } from 'date-fns'
 import StatusBadge from '../components/StatusBadge'
 import DirectionBadge from '../components/DirectionBadge'
@@ -18,6 +18,10 @@ export default function Events() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // assetCode için debounce: kullanıcı yazarken her tuşta sorgu atılmasını önle
+  const [assetInputValue, setAssetInputValue] = useState('')
+  const debounceRef = useRef(null)
+
   const [filters, setFilters] = useState({
     assetCode: '',
     direction: '',
@@ -25,6 +29,15 @@ export default function Events() {
     from: '',
     to: '',
   })
+
+  // Asset code input değişince 400ms debounce ile filter'a aktar
+  function handleAssetInput(value) {
+    setAssetInputValue(value)
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, assetCode: value }))
+    }, 400)
+  }
 
   const STATUS_OPTIONS = [
     { value: '', label: t('events.allStatuses') },
@@ -58,7 +71,12 @@ export default function Events() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
-  const hasFilters = filters.assetCode || filters.direction || filters.status || filters.from || filters.to
+  // Filtreler temizlendiğinde asset input'u da sıfırla
+  function clearFilters() {
+    setAssetInputValue('')
+    clearTimeout(debounceRef.current)
+    setFilters({ assetCode: '', direction: '', status: '', from: '', to: '' })
+  }
 
   return (
     <PageShell>
@@ -92,8 +110,9 @@ export default function Events() {
             <input
               type="text"
               placeholder={t('events.filterAsset')}
-              value={filters.assetCode}
-              onChange={(e) => setFilter('assetCode', e.target.value)}
+              value={assetInputValue}
+              onChange={(e) => handleAssetInput(e.target.value)}
+              aria-label={t('events.filterAsset')}
               className="input-field pl-8 text-sm h-10 sm:h-9 w-full sm:w-36"
             />
           </div>
@@ -101,6 +120,7 @@ export default function Events() {
           <select
             value={filters.direction}
             onChange={(e) => setFilter('direction', e.target.value)}
+            aria-label={t('events.allDirections')}
             className="input-field text-sm h-10 sm:h-9 pr-8"
           >
             {DIRECTION_OPTIONS.map((o) => (
@@ -111,6 +131,7 @@ export default function Events() {
           <select
             value={filters.status}
             onChange={(e) => setFilter('status', e.target.value)}
+            aria-label={t('events.allStatuses')}
             className="input-field text-sm h-10 sm:h-9 pr-8"
           >
             {STATUS_OPTIONS.map((o) => (
@@ -119,23 +140,27 @@ export default function Events() {
           </select>
 
           <input
+            id="filter-from"
             type="date"
             value={filters.from}
             onChange={(e) => setFilter('from', e.target.value)}
             className="input-field text-sm h-10 sm:h-9"
+            aria-label={t('events.filterFrom')}
             title={t('events.filterFrom')}
           />
           <input
+            id="filter-to"
             type="date"
             value={filters.to}
             onChange={(e) => setFilter('to', e.target.value)}
             className="input-field text-sm h-10 sm:h-9"
+            aria-label={t('events.filterTo')}
             title={t('events.filterTo')}
           />
 
-          {hasFilters && (
+          {(filters.assetCode || filters.direction || filters.status || filters.from || filters.to) && (
             <button
-              onClick={() => setFilters({ assetCode: '', direction: '', status: '', from: '', to: '' })}
+              onClick={clearFilters}
               className="btn-secondary text-xs h-10 sm:h-9 px-3 col-span-2 sm:col-span-1"
             >
               {t('events.clear')}
@@ -158,8 +183,21 @@ export default function Events() {
           ))}
         </div>
       ) : events.length === 0 ? (
-        <div className="glass-panel flex flex-col items-center justify-center py-16 gap-3">
-          <p className="text-fin-muted text-sm">{t('events.noEvents')}</p>
+        <div className="glass-panel flex flex-col items-center justify-center py-16 gap-4">
+          <div className="w-12 h-12 rounded-full bg-fin-accent/15 flex items-center justify-center">
+            <Sparkles size={22} className="text-fin-accent" />
+          </div>
+          <div className="text-center">
+            <p className="text-fin-text font-semibold mb-1">{t('events.noEvents')}</p>
+            <p className="text-sm text-fin-muted">{t('events.noEventsHint')}</p>
+          </div>
+          <button
+            onClick={() => navigate('/new-event')}
+            className="btn-primary flex items-center gap-2 text-sm mt-1"
+          >
+            <PlusCircle size={15} />
+            {t('events.newEvent')}
+          </button>
         </div>
       ) : (
         <>

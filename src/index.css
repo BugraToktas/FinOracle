@@ -79,7 +79,7 @@
   body {
     background-color: var(--color-fin-dark);
     color: var(--color-fin-text);
-    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-size: 1rem;
     -webkit-font-smoothing: antialiased;
     line-height: 1.6;

@@ -2,7 +2,7 @@ import { XMLParser } from "https://esm.sh/fast-xml-parser@4";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Provider = "rss" | "finnhub" | "alphavantage" | "yahoo_news" | "newsdata";
+type Provider = "rss" | "finnhub" | "alphavantage" | "yahoo_news" | "newsdata" | "google_news";
 
 type RetrieveInput = {
   query: string;
@@ -122,8 +122,9 @@ function scoreItem(
   else if (diff > 30)  s -= 0.5;
 
   // Provider quality — structured/ticker-specific APIs score higher
-  if (it.provider === "alphavantage" || it.provider === "finnhub") s += 0.4;
-  if (it.provider === "yahoo_news") s += 0.35; // asset-specific, high relevance
+  if (it.provider === "google_news") s += 1.5; // Highest priority
+  else if (it.provider === "alphavantage" || it.provider === "finnhub") s += 0.4;
+  else if (it.provider === "yahoo_news") s += 0.35; // asset-specific, high relevance
 
   // Domain trust
   if (TRUSTED_DOMAINS.has(it.domain)) s += 0.3;
@@ -163,9 +164,42 @@ function rankAndTrim(
   const withinWindow = deduped.filter((x) => dateDiffDays(x.published_at, eventDate) <= 21);
   const pool = withinWindow.length >= Math.ceil(limit / 3) ? withinWindow : deduped;
 
-  return pool
-    .sort((a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens))
-    .slice(0, limit);
+  const scored = pool.map((it) => ({ item: it, score: scoreItem(it, eventDate, questionTokens) }));
+  scored.sort((a, b) => b.score - a.score);
+
+  const selected: SourceItem[] = [];
+  const selectedUrls = new Set<string>();
+
+  // 1. Google News'e öncelik ver (en az 3-5 adet, eğer varsa)
+  const gnItems = scored.filter((x) => x.item.provider === "google_news");
+  const gnTake = Math.min(5, Math.max(3, gnItems.length)); // 3 ila 5 arası al
+  for (let i = 0; i < Math.min(gnTake, gnItems.length); i++) {
+    selected.push(gnItems[i].item);
+    selectedUrls.add(gnItems[i].item.url);
+  }
+
+  // 2. Diğer kaynakların hiçbiri boşta kalmasın (her birinden en iyi 1 tane al)
+  const providers = new Set(scored.map((x) => x.item.provider));
+  for (const prov of providers) {
+    if (prov === "google_news") continue;
+    const bestProvItem = scored.find((x) => x.item.provider === prov && !selectedUrls.has(x.item.url));
+    if (bestProvItem) {
+      selected.push(bestProvItem.item);
+      selectedUrls.add(bestProvItem.item.url);
+    }
+  }
+
+  // 3. Kalan kısmı en yüksek puanlılarla doldur
+  for (const x of scored) {
+    if (selected.length >= limit) break;
+    if (!selectedUrls.has(x.item.url)) {
+      selected.push(x.item);
+      selectedUrls.add(x.item.url);
+    }
+  }
+
+  // LLM'e en iyi sırada gitmesi için final diziyi tekrar skora göre sırala
+  return selected.sort((a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens));
 }
 
 // ─── Asset code → API ticker mapping ─────────────────────────────────────────
@@ -639,6 +673,7 @@ function parseGoogleNewsRss(xml: string): SourceItem[] {
         it.domain = pub.includes(".") ? pub : `${pub}.com`;
         it.title = it.title.replace(/\s[-–]\s[^-–]+$/, "").trim();
       }
+      it.provider = "google_news";
       return it;
     });
 }
