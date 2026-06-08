@@ -404,7 +404,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Backend rate limiting: fetch user limit from profile ──────────────────
-    let dailyLimit = 10;
+    let dailyLimit = 2;
     {
       const { data: profile } = await supabase
         .from("profiles")

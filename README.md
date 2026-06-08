@@ -256,7 +256,7 @@ npm run dev
 | Tier | Analyses / day | Notes |
 |---|---|---|
 | Unauthenticated | 0 | Read-only access |
-| Free user | 5 | Resets at midnight UTC |
+| Free user | 2 | Resets at midnight UTC |
 | *(future)* Pro | Unlimited | Stripe subscription |
 
 ---
@@ -623,7 +623,7 @@ npm run dev
 | Üyelik Tipi | Günlük Analiz | Notlar |
 |---|---|---|
 | Giriş yapmamış | 0 | Sadece okuma erişimi |
-| Ücretsiz Kullanıcı | 5 | Gece yarısı (UTC) sıfırlanır |
+| Ücretsiz Kullanıcı | 2 | Gece yarısı (UTC) sıfırlanır |
 | *(Gelecek)* Pro | Sınırsız | Stripe aboneliği |
 
 ---
