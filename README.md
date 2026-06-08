@@ -1,5 +1,7 @@
 # FinOracle
 
+**Official Website:** [finoracle1.vercel.app](https://finoracle1.vercel.app)
+
 AI-powered financial market event analysis platform. Ask a question about any market move — FinOracle infers the asset, retrieves date-filtered news from 6 parallel sources, generates a Gemini-powered analysis, and periodically re-verifies its conclusions.
 
 Supports **English and Turkish** questions. Focused on **US and Turkish markets** with full crypto and forex coverage.
@@ -364,6 +366,8 @@ MIT
 
 # 🇹🇷 Türkçe (Turkish)
 # FinOracle
+
+**Resmi Web Sitesi:** [finoracle1.vercel.app](https://finoracle1.vercel.app)
 
 Yapay zeka destekli finansal piyasa olayları analiz platformu. Herhangi bir piyasa hareketi hakkında soru sorun — FinOracle varlığı algılar, 6 paralel kaynaktan tarihe göre filtrelenmiş haberleri çeker, Gemini destekli bir analiz üretir ve sonuçlarını periyodik olarak yeniden doğrular.
 

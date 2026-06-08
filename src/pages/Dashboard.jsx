@@ -277,7 +277,7 @@ export default function Dashboard() {
                       <tr
                         key={ev.id}
                         onClick={() => navigate(`/events/${ev.id}`)}
-                        className="border-b border-fin-border/30 cursor-pointer table-row-hover"
+                        className="fin-table-row border-b border-fin-border/30 cursor-pointer"
                       >
                         <td className="px-5 py-3 font-mono font-semibold text-fin-text">{ev.asset_code}</td>
                         <td className="px-5 py-3 text-fin-muted font-mono text-xs">
@@ -297,7 +297,7 @@ export default function Dashboard() {
                           {latest ? <ConfidenceBar value={latest.confidence} /> : '—'}
                         </td>
                         <td className="px-5 py-3 text-right">
-                          <span className="text-xs text-fin-accent">{t('common.view')}</span>
+                          <span className="fin-table-view">{t('common.view')} →</span>
                         </td>
                       </tr>
                     )

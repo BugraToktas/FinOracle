@@ -9,7 +9,10 @@ export default function Layout() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex min-h-screen bg-fin-dark">
+    <div className="flex min-h-screen bg-fin-bg relative">
+      {/* ── Ambient top-right glow — subtle accent breathe ───────── */}
+      <div className="app-ambient-glow" aria-hidden="true" />
+
       {/* ── Mobile top bar ───────────────────────────────────────── */}
       <header className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center gap-3 px-4 h-14 bg-fin-card/95 border-b border-fin-border backdrop-blur-md">
         <button
@@ -42,7 +45,7 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* ── Main content ────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 min-w-0 bg-fin-bg">
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 min-w-0 bg-fin-bg relative z-10">
         <Outlet />
       </main>
     </div>

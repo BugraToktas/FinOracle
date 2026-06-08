@@ -12,6 +12,14 @@ const LANGS = [
   { code: 'tr', label: 'TR' },
 ]
 
+/** Returns up-to-2 uppercase initials from an email */
+function getInitials(email = '') {
+  const name = email.split('@')[0] ?? ''
+  const parts = name.split(/[._\-]/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { t, i18n } = useTranslation()
   const { user, isAdmin, signOut } = useAuth()
@@ -36,7 +44,6 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   }
 
   function handleNavClick() {
-    // Close drawer on mobile after navigation
     onClose()
   }
 
@@ -44,6 +51,8 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
     navigate('/')
     onClose()
   }
+
+  const initials = getInitials(user?.email)
 
   return (
     <aside
@@ -56,8 +65,8 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}
     >
-      {/* ── Logo row ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-fin-border">
+      {/* ── Logo row — gradient accent underline via CSS ──────────── */}
+      <div className="sidebar-logo-row flex items-center justify-between px-5 py-5">
         <button
           type="button"
           onClick={goHome}
@@ -72,7 +81,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         {/* Close button — mobile only */}
         <button
           onClick={onClose}
-          className="md:hidden p-1.5 text-fin-muted hover:text-fin-text transition-colors rounded-lg"
+          className="md:hidden p-1.5 text-fin-muted hover:text-fin-text transition-colors rounded-lg hover:bg-fin-border/30"
           aria-label="Close menu"
         >
           <X size={18} />
@@ -81,28 +90,26 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
       {/* ── Nav + user section ───────────────────────────────────── */}
       <div className="flex-1 flex flex-col py-4 px-2">
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               onClick={handleNavClick}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-3 md:py-2.5 rounded-lg text-base font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-fin-accent/15 text-fin-accent shadow-sm shadow-fin-accent/5'
-                    : 'text-fin-muted hover:text-fin-text hover:bg-fin-border/30 hover:translate-x-0.5'
+                `sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium ${
+                  isActive ? 'sidebar-nav-active' : 'text-fin-muted'
                 }`
               }
             >
-              <Icon size={18} className="shrink-0" />
+              <Icon size={17} className="shrink-0" />
               {label}
             </NavLink>
           ))}
         </nav>
 
         {/* Language + user — right below nav */}
-        <div className="mt-4 pt-4 border-t border-fin-border space-y-3 px-2">
+        <div className="mt-auto pt-4 border-t border-fin-border/60 space-y-3 px-1">
           {/* Language switcher */}
           <div className="flex items-center gap-1">
             <Globe size={13} className="text-fin-muted mr-1 shrink-0" />
@@ -121,21 +128,25 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
             ))}
           </div>
 
-          {/* User info */}
+          {/* User info — with gradient avatar */}
           {user ? (
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <p className="text-sm text-fin-text font-medium truncate">
+            <div className="flex items-center gap-2.5">
+              {/* Gradient avatar circle */}
+              <div className="sidebar-avatar" aria-hidden="true">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-fin-text font-semibold truncate leading-snug">
                   {user.email?.split('@')[0]}
                 </p>
-                <p className="text-sm text-fin-muted/60 truncate">{user.email}</p>
+                <p className="text-xs text-fin-muted/55 truncate">{user.email}</p>
               </div>
               <button
                 onClick={handleSignOut}
                 title={t('nav.signOut')}
-                className="text-fin-muted hover:text-fin-down transition-colors ml-2 shrink-0 p-1.5 rounded-lg hover:bg-fin-down/10"
+                className="text-fin-muted hover:text-fin-down transition-colors shrink-0 p-1.5 rounded-lg hover:bg-fin-down/10"
               >
-                <LogOut size={16} />
+                <LogOut size={15} />
               </button>
             </div>
           ) : (

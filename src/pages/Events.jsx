@@ -289,7 +289,7 @@ export default function Events() {
                       <tr
                         key={ev.id}
                         onClick={() => navigate(`/events/${ev.id}`)}
-                        className="border-b border-fin-border/30 cursor-pointer table-row-hover"
+                        className="fin-table-row border-b border-fin-border/30 cursor-pointer"
                       >
                         <td className="px-5 py-3 text-fin-text">
                           <span className="font-mono font-semibold">{ev.asset_code}</span>
@@ -323,7 +323,7 @@ export default function Events() {
                           {latest ? <ConfidenceBar value={latest.confidence} /> : '—'}
                         </td>
                         <td className="px-5 py-3 text-right whitespace-nowrap">
-                          <span className="text-xs text-fin-accent">{t('common.view')}</span>
+                          <span className="fin-table-view">{t('common.view')} →</span>
                         </td>
                       </tr>
                     )
