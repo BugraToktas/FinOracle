@@ -57,10 +57,11 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   return (
     <aside
       className={`
-        fixed md:static inset-y-0 left-0 z-50
-        w-64 md:w-56 shrink-0
+        fixed inset-y-0 left-0 z-50
+        w-64 md:w-56
         flex flex-col bg-fin-card/98 border-r border-fin-border backdrop-blur-md
-        min-h-screen shadow-xl md:shadow-none
+        h-dvh min-h-screen shadow-xl md:shadow-none
+        overflow-hidden
         transition-transform duration-300 ease-out
         ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}
@@ -89,7 +90,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
       </div>
 
       {/* ── Nav + user section ───────────────────────────────────── */}
-      <div className="flex-1 flex flex-col py-4 px-2">
+      <div className="flex-1 flex flex-col py-4 px-2 min-h-0 overflow-y-auto">
         <nav className="space-y-0.5">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -108,16 +109,15 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           ))}
         </nav>
 
-        {/* Language + user — right below nav */}
-        <div className="mt-auto pt-4 border-t border-fin-border/60 space-y-3 px-1">
-          {/* Language switcher */}
-          <div className="flex items-center gap-1">
-            <Globe size={13} className="text-fin-muted mr-1 shrink-0" />
+        {/* Language + user — pinned footer */}
+        <div className="sidebar-footer mt-auto">
+          <div className="flex items-center gap-1.5">
+            <Globe size={16} className="text-fin-muted mr-0.5 shrink-0" />
             {LANGS.map((l) => (
               <button
                 key={l.code}
                 onClick={() => changeLang(l.code)}
-                className={`text-sm px-2.5 py-1 rounded transition-all duration-150 ${
+                className={`text-sm px-3 py-1.5 rounded-md transition-all duration-150 min-w-[2.5rem] ${
                   i18n.language === l.code
                     ? 'bg-fin-accent/20 text-fin-accent font-semibold'
                     : 'text-fin-muted hover:text-fin-text hover:bg-fin-border/30'
@@ -128,29 +128,27 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
             ))}
           </div>
 
-          {/* User info — with gradient avatar */}
           {user ? (
-            <div className="flex items-center gap-2.5">
-              {/* Gradient avatar circle */}
+            <div className="flex items-center gap-3">
               <div className="sidebar-avatar" aria-hidden="true">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-fin-text font-semibold truncate leading-snug">
+                <p className="text-base text-fin-text font-semibold truncate leading-snug">
                   {user.email?.split('@')[0]}
                 </p>
-                <p className="text-xs text-fin-muted/55 truncate">{user.email}</p>
+                <p className="text-sm text-fin-muted/60 truncate mt-0.5">{user.email}</p>
               </div>
               <button
                 onClick={handleSignOut}
                 title={t('nav.signOut')}
-                className="text-fin-muted hover:text-fin-down transition-colors shrink-0 p-1.5 rounded-lg hover:bg-fin-down/10"
+                className="text-fin-muted hover:text-fin-down transition-colors shrink-0 p-2 rounded-lg hover:bg-fin-down/10"
               >
-                <LogOut size={15} />
+                <LogOut size={18} />
               </button>
             </div>
           ) : (
-            <p className="text-xs text-fin-muted/60">FinOracle v1.0</p>
+            <p className="text-sm text-fin-muted/60">FinOracle v1.0</p>
           )}
         </div>
       </div>

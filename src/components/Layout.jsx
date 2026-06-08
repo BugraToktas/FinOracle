@@ -9,7 +9,7 @@ export default function Layout() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex min-h-screen bg-fin-bg relative">
+    <div className="flex h-dvh min-h-screen overflow-hidden bg-fin-bg relative">
       {/* ── Ambient top-right glow — subtle accent breathe ───────── */}
       <div className="app-ambient-glow" aria-hidden="true" />
 
@@ -45,7 +45,7 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* ── Main content ────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0 min-w-0 bg-fin-bg relative z-10">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pt-14 md:pt-0 md:ml-56 min-w-0 h-full bg-fin-bg relative z-10">
         <Outlet />
       </main>
     </div>
