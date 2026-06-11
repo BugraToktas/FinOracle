@@ -334,14 +334,14 @@ export default function NewEvent() {
 
           {/* 3 — Event context */}
           <section className="analysis-section">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+              <div className="md:col-span-6">
                 <label className="analysis-field-label" htmlFor="analysis-date">
                   {t('newEvent.eventDate')}
                 </label>
 
                 {/* Quick-pick preset buttons */}
-                <div className="flex flex-wrap gap-1.5 mb-2">
+                <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-3">
                   {[
                     { label: t('newEvent.dateYesterday') || 'Dün',         days: 1  },
                     { label: t('newEvent.date1Week')     || '1 Hafta',      days: 7  },
@@ -358,10 +358,10 @@ export default function NewEvent() {
                         key={days}
                         type="button"
                         onClick={() => set('event_date', val)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${
+                        className={`min-h-[2.5rem] px-2 flex items-center justify-center rounded-lg text-xs font-semibold border transition-all duration-200 ${
                           form.event_date === val
-                            ? 'bg-fin-accent/20 border-fin-accent text-fin-accent'
-                            : 'border-fin-border text-fin-muted hover:border-fin-muted/60 hover:text-fin-text hover:bg-fin-border/20'
+                            ? 'bg-fin-accent/20 border-fin-accent text-fin-accent shadow-sm shadow-fin-accent/10'
+                            : 'border-fin-border text-fin-muted hover:border-fin-muted/80 hover:text-fin-text hover:bg-fin-border/20'
                         }`}
                       >
                         {label}
@@ -376,7 +376,7 @@ export default function NewEvent() {
                   value={form.event_date}
                   max={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => set('event_date', e.target.value)}
-                  className="input-field w-full text-sm"
+                  className="input-field w-full text-sm min-h-[2.5rem]"
                   required
                 />
 
@@ -392,7 +392,7 @@ export default function NewEvent() {
                     : diffDays < 365 ? `${Math.round(diffDays/30)} ${t('newEvent.dateMonthsAgo') || 'ay önce'}`
                     : `${Math.round(diffDays/365)} ${t('newEvent.dateYearsAgo') || 'yıl önce'}`
                   return (
-                    <p className="text-xs text-fin-muted mt-1.5 font-mono">
+                    <p className="text-xs text-fin-muted mt-2 font-mono">
                       {sel.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })}
                       <span className="ml-2 text-fin-accent/70">— {rel}</span>
                     </p>
@@ -401,7 +401,7 @@ export default function NewEvent() {
               </div>
 
 
-              <div>
+              <div className="md:col-span-3">
                 <span className="analysis-field-label block">{t('newEvent.direction')}</span>
                 <div className="flex gap-2">
                   {['up', 'down'].map((d) => (
@@ -423,7 +423,7 @@ export default function NewEvent() {
                 </div>
               </div>
 
-              <div>
+              <div className="md:col-span-3">
                 <label className="analysis-field-label" htmlFor="analysis-magnitude">
                   {t('newEvent.magnitude')}{' '}
                   <span className="normal-case font-normal tracking-normal text-fin-muted/55">
@@ -433,11 +433,11 @@ export default function NewEvent() {
                 <input
                   id="analysis-magnitude"
                   type="number"
-                  step="0.01"
+                  step="0.1"
                   value={form.magnitude}
                   onChange={(e) => set('magnitude', e.target.value)}
-                  placeholder="e.g. -3.5"
-                  className="input-field w-full text-sm font-mono"
+                  placeholder={t('newEvent.magnitudePlaceholder')}
+                  className="input-field w-full text-sm min-h-[2.5rem]"
                 />
               </div>
             </div>
