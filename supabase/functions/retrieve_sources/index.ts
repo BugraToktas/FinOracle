@@ -102,8 +102,10 @@ const TRUSTED_DOMAINS = new Set([
 ]);
 
 /**
- * Score sources by: date proximity + provider quality + domain trust +
- * question relevance (title match = 2×, snippet match = 1×).
+ * Score sources by: date proximity + domain trust + question relevance.
+ * (title match = 2×, snippet match = 1×).
+ * Provider-level priority is NOT part of this score; it is enforced
+ * structurally by balancedRankAndTrim's slot allocation.
  */
 function scoreItem(
   it: SourceItem,
@@ -121,10 +123,9 @@ function scoreItem(
   // Articles far outside window get a penalty
   else if (diff > 30)  s -= 0.5;
 
-  // Provider quality — structured/ticker-specific APIs score higher
-  if (it.provider === "google_news") s += 1.5; // Highest priority
-  else if (it.provider === "alphavantage" || it.provider === "finnhub") s += 0.4;
-  else if (it.provider === "yahoo_news") s += 0.35; // asset-specific, high relevance
+  // NOTE: No provider-level score bonus here.
+  // Provider balance is enforced by balancedRankAndTrim slot allocation;
+  // this score is used only for intra-provider ranking.
 
   // Domain trust
   if (TRUSTED_DOMAINS.has(it.domain)) s += 0.3;
@@ -141,7 +142,7 @@ function scoreItem(
     const snippetHay = (it.snippet ?? "").toLowerCase();
     let hits = 0;
     for (const tok of questionTokens) {
-      const re = new RegExp(`\\b${tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+      const re = new RegExp(`\\b${tok.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\b`);
       if (re.test(titleHay))        hits += 2;
       else if (re.test(snippetHay)) hits += 1;
     }
@@ -151,55 +152,115 @@ function scoreItem(
   return s;
 }
 
-function rankAndTrim(
+/**
+ * Balanced multi-provider selection:
+ *  1. Rank each provider's candidates by score (date + domain + relevance).
+ *  2. Guarantee every active provider gets at least 1 slot.
+ *  3. Cap any single provider at MAX_PROVIDER_SHARE of total slots.
+ *  4. Fill remaining slots round-robin across providers (highest score first).
+ *  5. Return provider_distribution alongside the final items.
+ */
+function balancedRankAndTrim(
   items: SourceItem[],
   limit: number,
   eventDate: string | null,
   questionTokens: string[] = [],
-) {
+): { items: SourceItem[]; provider_distribution: Record<string, number> } {
   const deduped = uniqByUrl(items).filter((x) => x.domain);
 
-  // Prefer sources within ±21 days of the event; if not enough, fall back to all sources.
-  // No hard cutoff — old events still get contextual analysis from recent sources.
+  // Prefer sources within ±21 days of the event; fall back to all if not enough.
   const withinWindow = deduped.filter((x) => dateDiffDays(x.published_at, eventDate) <= 21);
   const pool = withinWindow.length >= Math.ceil(limit / 3) ? withinWindow : deduped;
 
-  const scored = pool.map((it) => ({ item: it, score: scoreItem(it, eventDate, questionTokens) }));
-  scored.sort((a, b) => b.score - a.score);
+  // Group by provider, sorted by score within each group
+  const byProvider = new Map<Provider, Array<{ item: SourceItem; score: number }>>();
+  for (const item of pool) {
+    const s = scoreItem(item, eventDate, questionTokens);
+    if (!byProvider.has(item.provider)) byProvider.set(item.provider, []);
+    byProvider.get(item.provider)!.push({ item, score: s });
+  }
+  for (const [, arr] of byProvider) arr.sort((a, b) => b.score - a.score);
+
+  const activeProviders = [...byProvider.keys()];
+  const providerCount   = activeProviders.length;
+
+  // Max slots any single provider may fill (40% cap, but at least 1).
+  // With 10 results: max 4 from any single provider.
+  // With 6 active providers this guarantees ≥ 6 distinct sources in Phase 1.
+  const MAX_PROVIDER_SHARE = Math.max(1, Math.floor(limit * 0.4));
+
+  // Cursor: how many we've already taken from each provider
+  const taken = new Map<Provider, number>(activeProviders.map((p) => [p, 0]));
 
   const selected: SourceItem[] = [];
   const selectedUrls = new Set<string>();
 
-  // 1. Google News'e öncelik ver (en az 3-5 adet, eğer varsa)
-  const gnItems = scored.filter((x) => x.item.provider === "google_news");
-  const gnTake = Math.min(5, Math.max(3, gnItems.length)); // 3 ila 5 arası al
-  for (let i = 0; i < Math.min(gnTake, gnItems.length); i++) {
-    selected.push(gnItems[i].item);
-    selectedUrls.add(gnItems[i].item.url);
-  }
-
-  // 2. Diğer kaynakların hiçbiri boşta kalmasın (her birinden en iyi 1 tane al)
-  const providers = new Set(scored.map((x) => x.item.provider));
-  for (const prov of providers) {
-    if (prov === "google_news") continue;
-    const bestProvItem = scored.find((x) => x.item.provider === prov && !selectedUrls.has(x.item.url));
-    if (bestProvItem) {
-      selected.push(bestProvItem.item);
-      selectedUrls.add(bestProvItem.item.url);
-    }
-  }
-
-  // 3. Kalan kısmı en yüksek puanlılarla doldur
-  for (const x of scored) {
+  // ── Phase 1: Guarantee at least 1 slot per active provider ──────────────
+  for (const prov of activeProviders) {
     if (selected.length >= limit) break;
-    if (!selectedUrls.has(x.item.url)) {
-      selected.push(x.item);
-      selectedUrls.add(x.item.url);
+    const candidates = byProvider.get(prov)!;
+    const next = candidates.find((x) => !selectedUrls.has(x.item.url));
+    if (next) {
+      selected.push(next.item);
+      selectedUrls.add(next.item.url);
+      taken.set(prov, 1);
     }
   }
 
-  // LLM'e en iyi sırada gitmesi için final diziyi tekrar skora göre sırala
-  return selected.sort((a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens));
+  // ── Phase 2: Round-robin fill with per-provider cap ──────────────────────
+  let remaining = limit - selected.length;
+  let rounds = 0;
+  while (remaining > 0 && rounds < limit * providerCount) {
+    rounds++;
+    let anyAdded = false;
+    for (const prov of activeProviders) {
+      if (selected.length >= limit) break;
+      if ((taken.get(prov) ?? 0) >= MAX_PROVIDER_SHARE) continue;
+      const candidates = byProvider.get(prov)!;
+      const takenCount = taken.get(prov) ?? 0;
+      // Find the next unchosen item from this provider
+      let added = 0;
+      for (const x of candidates) {
+        if (added >= 1) break; // one per round per provider
+        if (!selectedUrls.has(x.item.url)) {
+          selected.push(x.item);
+          selectedUrls.add(x.item.url);
+          taken.set(prov, takenCount + 1);
+          remaining--;
+          added++;
+          anyAdded = true;
+        }
+      }
+    }
+    if (!anyAdded) break; // all providers exhausted
+  }
+
+  // ── Phase 3: Last-resort fill ignoring cap (avoids short results) ────────
+  if (selected.length < limit) {
+    const allScored = pool
+      .map((it) => ({ item: it, score: scoreItem(it, eventDate, questionTokens) }))
+      .sort((a, b) => b.score - a.score);
+    for (const x of allScored) {
+      if (selected.length >= limit) break;
+      if (!selectedUrls.has(x.item.url)) {
+        selected.push(x.item);
+        selectedUrls.add(x.item.url);
+      }
+    }
+  }
+
+  // Final sort by score so LLM receives highest-quality sources first
+  const finalItems = selected.sort(
+    (a, b) => scoreItem(b, eventDate, questionTokens) - scoreItem(a, eventDate, questionTokens)
+  );
+
+  // Build distribution map
+  const distribution: Record<string, number> = {};
+  for (const it of finalItems) {
+    distribution[it.provider] = (distribution[it.provider] ?? 0) + 1;
+  }
+
+  return { items: finalItems, provider_distribution: distribution };
 }
 
 // ─── Asset code → API ticker mapping ─────────────────────────────────────────
@@ -678,11 +739,20 @@ function parseGoogleNewsRss(xml: string): SourceItem[] {
     });
 }
 
-function buildDateSuffix(eventDate: string, windowDays = 5): string {
+function buildDateSuffix(eventDate: string): string {
   const base = new Date(eventDate);
+  const now  = new Date();
+  const daysOld = (now.getTime() - base.getTime()) / 86_400_000;
+
+  // Widen the search window for older events:
+  //  - recent events (< 30 days):  ±5 days — tight, avoids noise
+  //  - medium-old (30–90 days):    ±10 days — news coverage may be spread out
+  //  - very old (> 90 days):       ±14 days — maximise recall for archived news
+  const windowDays = daysOld > 90 ? 14 : daysOld > 30 ? 10 : 5;
+
   const from = new Date(base); from.setDate(from.getDate() - windowDays);
   const to   = new Date(base); to.setDate(to.getDate() + windowDays);
-  const fmt  = (d: Date) => d.toISOString().split("T")[0]; // YYYY-MM-DD — confirmed working with Google News RSS
+  const fmt  = (d: Date) => d.toISOString().split("T")[0];
   return `+after:${fmt(from)}+before:${fmt(to)}`;
 }
 
@@ -726,6 +796,11 @@ async function getFromGoogleNews(
   const dateSuffix = eventDate ? buildDateSuffix(eventDate) : "";
   const isTurkish = TURKISH_TICKERS.has(upper);
 
+  // Determine if this is a historical event (> 30 days old) for debug/context
+  const isHistorical = eventDate
+    ? (new Date().getTime() - new Date(eventDate).getTime()) / 86_400_000 > 30
+    : false;
+
   // Build parallel fetch list: English always, Turkish additionally for BIST stocks
   const fetches: Promise<SourceItem[]>[] = [
     fetchGoogleNewsRss(searchTerms, dateSuffix, "en-US&gl=US&ceid=US:en"),
@@ -746,6 +821,8 @@ async function getFromGoogleNews(
       count: combined.length,
       terms: searchTerms,
       turkish_search: isTurkish,
+      is_historical: isHistorical,
+      date_suffix: dateSuffix,
     }] : [],
   };
 }
@@ -1038,12 +1115,12 @@ Deno.serve(async (req) => {
       ...ndOut.items, ...yhOut.items,
       ...gnOut.items, ...rssOut.items,
     ];
-    let finalItems = rankAndTrim(allItems, limit, eventDate, tokens);
+    let balanced = balancedRankAndTrim(allItems, limit, eventDate, tokens);
 
     // Fallback: if too few results, retry RSS without filter
-    if (finalItems.length < Math.ceil(limit / 2) && !noFilter) {
+    if (balanced.items.length < Math.ceil(limit / 2) && !noFilter) {
       const fallback = await getFromRSS(tokens, limit + 6, true, false);
-      finalItems = rankAndTrim([...allItems, ...fallback.items], limit, eventDate, tokens);
+      balanced = balancedRankAndTrim([...allItems, ...fallback.items], limit, eventDate, tokens);
     }
 
     return json(200, {
@@ -1055,9 +1132,10 @@ Deno.serve(async (req) => {
         yahoo_news:   yhOut.items.length,
         google_news:  gnOut.items.length,
         rss:          rssOut.items.length,
-        final:        finalItems.length,
+        final:        balanced.items.length,
       },
-      items: finalItems,
+      provider_distribution: balanced.provider_distribution,
+      items: balanced.items,
       debug: debug ? {
         ticker_av:      avTicker,
         symbol_finnhub: finnhubSym,

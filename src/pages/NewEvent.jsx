@@ -339,15 +339,67 @@ export default function NewEvent() {
                 <label className="analysis-field-label" htmlFor="analysis-date">
                   {t('newEvent.eventDate')}
                 </label>
+
+                {/* Quick-pick preset buttons */}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    { label: t('newEvent.dateYesterday') || 'Dün',         days: 1  },
+                    { label: t('newEvent.date1Week')     || '1 Hafta',      days: 7  },
+                    { label: t('newEvent.date1Month')    || '1 Ay',         days: 30 },
+                    { label: t('newEvent.date3Months')   || '3 Ay',         days: 90 },
+                    { label: t('newEvent.date6Months')   || '6 Ay',         days: 180 },
+                    { label: t('newEvent.date1Year')     || '1 Yıl',        days: 365 },
+                  ].map(({ label, days }) => {
+                    const d = new Date()
+                    d.setDate(d.getDate() - days)
+                    const val = d.toISOString().slice(0, 10)
+                    return (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => set('event_date', val)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${
+                          form.event_date === val
+                            ? 'bg-fin-accent/20 border-fin-accent text-fin-accent'
+                            : 'border-fin-border text-fin-muted hover:border-fin-muted/60 hover:text-fin-text hover:bg-fin-border/20'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+
                 <input
                   id="analysis-date"
                   type="date"
                   value={form.event_date}
+                  max={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => set('event_date', e.target.value)}
                   className="input-field w-full text-sm"
                   required
                 />
+
+                {/* Human-readable date label */}
+                {form.event_date && (() => {
+                  const sel = new Date(form.event_date)
+                  const today = new Date(); today.setHours(0,0,0,0)
+                  const diffDays = Math.round((today - sel) / 86400000)
+                  const rel = diffDays === 0 ? (t('newEvent.dateToday') || 'Bugün')
+                    : diffDays === 1 ? (t('newEvent.dateYesterday') || 'Dün')
+                    : diffDays < 7  ? `${diffDays} ${t('newEvent.dateDaysAgo') || 'gün önce'}`
+                    : diffDays < 31 ? `${Math.round(diffDays/7)} ${t('newEvent.dateWeeksAgo') || 'hafta önce'}`
+                    : diffDays < 365 ? `${Math.round(diffDays/30)} ${t('newEvent.dateMonthsAgo') || 'ay önce'}`
+                    : `${Math.round(diffDays/365)} ${t('newEvent.dateYearsAgo') || 'yıl önce'}`
+                  return (
+                    <p className="text-xs text-fin-muted mt-1.5 font-mono">
+                      {sel.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })}
+                      <span className="ml-2 text-fin-accent/70">— {rel}</span>
+                    </p>
+                  )
+                })()}
               </div>
+
 
               <div>
                 <span className="analysis-field-label block">{t('newEvent.direction')}</span>

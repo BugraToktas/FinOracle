@@ -1,5 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import { format } from 'date-fns'
+import { enUS, tr } from 'date-fns/locale'
+import { useTranslation } from 'react-i18next'
 
 // ─── Provider display config ──────────────────────────────────────────────────
 const PROVIDER_CONFIG = {
@@ -24,8 +26,11 @@ function ProviderBadge({ provider }) {
 
 
 export default function SourceList({ sources = [] }) {
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language === 'tr' ? tr : enUS
+
   if (!sources.length) {
-    return <p className="text-sm text-fin-muted italic">No source documents linked.</p>
+    return <p className="text-sm text-fin-muted italic">{t('sourceList.noDocuments')}</p>
   }
 
   return (
@@ -57,7 +62,7 @@ export default function SourceList({ sources = [] }) {
                 <>
                   <span className="text-fin-border text-[10px]">·</span>
                   <span className="text-[11px] text-fin-muted/70">
-                    {format(new Date(src.published_at), 'dd MMM yyyy')}
+                    {format(new Date(src.published_at), 'dd MMM yyyy', { locale })}
                   </span>
                 </>
               )}

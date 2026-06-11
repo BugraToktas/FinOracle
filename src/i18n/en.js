@@ -95,7 +95,6 @@ export default {
     noEvents: 'No events match your filters.',
     noEventsHint: 'Try clearing your filters or add a new analysis.',
   },
-  // New Event
   newEvent: {
     title: 'New Analysis',
     subtitle: 'Describe the market event to analyse',
@@ -123,6 +122,18 @@ export default {
     limitReached: "You've used all {{limit}} daily analyses. Resets at midnight UTC.",
     limitInfo: '{{used}} / {{limit}} analyses used today',
     errorMissing: 'Please fill in all required fields.',
+    // Date quick-pick
+    dateYesterday: 'Yesterday',
+    date1Week:     '1 Week',
+    date1Month:    '1 Month',
+    date3Months:   '3 Months',
+    date6Months:   '6 Months',
+    date1Year:     '1 Year',
+    dateToday:     'Today',
+    dateDaysAgo:   'days ago',
+    dateWeeksAgo:  'weeks ago',
+    dateMonthsAgo: 'months ago',
+    dateYearsAgo:  'years ago',
   },
   // Event Detail
   eventDetail: {
@@ -292,9 +303,18 @@ export default {
     new: 'New',
     score: 'Score',
   },
+  status: {
+    pending:      'Pending',
+    verified:     'Verified',
+    failed:       'Failed',
+    unverifiable: 'Unverifiable',
+  },
+  sourceList: {
+    noDocuments: 'No source documents linked.',
+  },
   notFound: {
     title: 'Page not found',
-    desc: 'The page you\'re looking for doesn\'t exist or has been moved.',
+    desc: "The page you're looking for doesn't exist or has been moved.",
     goBack: 'Go back',
     goHome: 'Dashboard',
   },

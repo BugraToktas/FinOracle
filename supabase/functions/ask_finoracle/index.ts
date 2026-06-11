@@ -537,10 +537,17 @@ Deno.serve(async (req) => {
 
     // 4) LLM analysis (with one retry on failure)
     step = "llm_proxy_call";
+
+    // Calculate how old this event is for historical context
+    const daysSinceEvent = eventDate
+      ? Math.floor((Date.now() - new Date(eventDate).getTime()) / 86_400_000)
+      : 0;
+
     const llmPayload = {
       task: "ask",
       question: body.question,
       event: { asset_code: body.asset_code, event_date: body.event_date, direction: body.direction },
+      days_since_event: daysSinceEvent,
       source_priors: retrieved.slice(0, 15).map((d) => ({
         domain: d.domain,
         title: d.title,

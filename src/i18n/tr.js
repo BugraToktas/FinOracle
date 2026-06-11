@@ -118,6 +118,18 @@ export default {
     limitReached: 'Günlük {{limit}} analizin tamamını kullandınız. Gece yarısı (UTC) sıfırlanır.',
     limitInfo: 'Bugün {{used}} / {{limit}} analiz kullanıldı',
     errorMissing: 'Lütfen tüm zorunlu alanları doldurun.',
+    // Date quick-pick
+    dateYesterday: 'Dün',
+    date1Week:     '1 Hafta',
+    date1Month:    '1 Ay',
+    date3Months:   '3 Ay',
+    date6Months:   '6 Ay',
+    date1Year:     '1 Yıl',
+    dateToday:     'Bugün',
+    dateDaysAgo:   'gün önce',
+    dateWeeksAgo:  'hafta önce',
+    dateMonthsAgo: 'ay önce',
+    dateYearsAgo:  'yıl önce',
   },
   eventDetail: {
     back: '← Geri',
@@ -283,6 +295,15 @@ export default {
     view: 'Görüntüle →',
     new: 'Yeni',
     score: 'Puan',
+  },
+  status: {
+    pending:      'Bekliyor',
+    verified:     'Doğrulandı',
+    failed:       'Başarısız',
+    unverifiable: 'Doğrulanamadı',
+  },
+  sourceList: {
+    noDocuments: 'Kaynak belge bulunamadı.',
   },
   notFound: {
     title: 'Sayfa bulunamadı',

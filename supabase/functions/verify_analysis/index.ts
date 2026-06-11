@@ -154,32 +154,35 @@ Deno.serve(async (req) => {
     const recheck = {
       summary: String(llm?.summary ?? ""),
       confidence: typeof llm?.confidence === "number" ? llm.confidence : 0.5,
+      reasoning: typeof llm?.reasoning === "string" ? llm.reasoning : null,
       raw_response: String(llm?.raw_response ?? JSON.stringify(llm ?? {}))
     };
 
     // Use verdict from LLM directly; it now includes "correct"|"partial"|"wrong" in the JSON schema.
-    // No bag-of-words fallback — if LLM didn't return a valid verdict, default to "partial".
+    // If LLM returned null/missing verdict, the recheck is inconclusive — mark as unverifiable
+    // rather than silently counting it as "partial" (which would pollute accuracy stats).
     const VALID_VERDICTS = new Set<string>(["correct", "partial", "wrong"]);
-    const verdict: Verdict = VALID_VERDICTS.has(llm?.verdict)
+    const verdict: Verdict | null = VALID_VERDICTS.has(llm?.verdict)
       ? llm.verdict as Verdict
-      : "partial";
+      : null;
 
-    // 5) Save revalidation
+    // 5) Save revalidation (even for null verdict, so we have an audit trail)
     const { data: revalRow, error: rErr } = await supabase
       .from("revalidations")
       .insert([{
         analysis_id: analysis.id,
-        verdict,
-        confidence: recheck.confidence,
-        notes: "gemini recheck via llm_proxy",
+        verdict:     verdict ?? "partial", // DB constraint: use partial as storage fallback only
+        confidence:  recheck.confidence,
+        notes:       verdict
+          ? `gemini recheck via llm_proxy | reasoning: ${recheck.reasoning ?? "none"}`
+          : "gemini recheck: inconclusive — verdict field missing or invalid in LLM response",
         raw_response: recheck.raw_response
       }])
       .select("id, analysis_id, verdict, confidence, created_at")
       .single();
 
     if (rErr || !revalRow) {
-      // Race condition: başka bir istek zaten insert etti
-      // String matching yerine Postgres hata kodu 23505 (unique_violation) kullan
+      // Race condition: another request already inserted
       if ((rErr as any)?.code === "23505") {
         await supabase
           .from("analysis_results")
@@ -191,27 +194,33 @@ Deno.serve(async (req) => {
       return json(500, { error: "failed to insert revalidation", details: rErr?.message }, cors);
     }
 
-    // 6) Update reputation scores — atomic SQL to prevent race condition
-    //    when run_verification_queue runs multiple analyses in parallel.
-    const isCorrect = verdict === "correct";
-
-    for (const link of links ?? []) {
-      await supabase.rpc("increment_source_reputation", {
-        p_source_id: link.source_id,
-        p_is_correct: isCorrect
-      });
+    // 6) Update reputation scores only when we have a definitive verdict.
+    //    null verdict = inconclusive — skip reputation update to avoid polluting stats.
+    if (verdict !== null) {
+      const isCorrect = verdict === "correct";
+      for (const link of links ?? []) {
+        await supabase.rpc("increment_source_reputation", {
+          p_source_id: link.source_id,
+          p_is_correct: isCorrect
+        });
+      }
     }
 
-    // 7) Mark analysis verified (status only — verified column dropped)
+    // 7) Mark analysis status:
+    //    - definitive verdict (correct/partial/wrong) → "verified"
+    //    - null verdict (LLM could not evaluate) → "unverifiable"
+    const newStatus = verdict !== null ? "verified" : "unverifiable";
     await supabase
       .from("analysis_results")
-      .update({ status: "verified" })
+      .update({ status: newStatus })
       .eq("id", analysis.id);
 
     return json(200, {
       ok: true,
       analysis_id: analysis.id,
-      verdict,
+      verdict:     verdict ?? "unverifiable",
+      status:      newStatus,
+      reasoning:   recheck.reasoning,
       revalidation_id: revalRow.id
     }, cors);
   } catch (err) {

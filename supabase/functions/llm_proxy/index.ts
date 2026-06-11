@@ -80,6 +80,19 @@ Question: "${safeStr(inp?.question as string, 500)}"`;
     const eventDate = event?.event_date ?? "unknown date";
     const assetCode = event?.asset_code ?? "the asset";
     const direction = event?.direction ?? "moved";
+    const questionText = safeStr(inp?.question as string, 500);
+    const daysSince = typeof inp?.days_since_event === "number" ? inp.days_since_event : 0;
+
+    // Detect question language: Turkish chars or common TR stop words → Turkish
+    const TR_STOP = /\b(neden|nasıl|neden|hangi|hisse|yükseldi|düştü|artış|azalış|piyasa|borsa|neden|olan|için|ancak|çünkü|ama|veya|dolar|altın|fiyat)\b/i;
+    const HAS_TR_CHARS = /[ğüşıöçĞÜŞİÖÇ]/.test(questionText);
+    const isTurkish = HAS_TR_CHARS || TR_STOP.test(questionText);
+    const summaryLanguage = isTurkish ? "Turkish" : "English";
+
+    // Historical context note: for events > 30 days old, tell LLM to analyze from archive
+    const historicalNote = daysSince > 30
+      ? `\nHISTORICAL ANALYSIS NOTE: This event occurred ${daysSince} days ago. The sources below are archived news from that period — they are the best available evidence. Analyze confidently from what the sources say; do NOT claim you cannot analyze because the event is in the past.`
+      : "";
 
     // Sanitize a string for safe inclusion in the prompt
     function sanitizeForPrompt(v: unknown, maxLen = 280): string {
@@ -101,7 +114,7 @@ Question: "${safeStr(inp?.question as string, 500)}"`;
       return `[${i + 1}] ${date} | ${domain} | ${title}${snippet}`;
     }).join("\n");
 
-    return `You are a financial analyst. Explain why ${assetCode} moved ${direction} on ${eventDate}.
+    return `You are a financial analyst. Explain why ${assetCode} moved ${direction} on ${eventDate}.${historicalNote}
 
 Return ONLY valid JSON (no markdown, no backticks):
 {
@@ -109,6 +122,13 @@ Return ONLY valid JSON (no markdown, no backticks):
   "confidence": number,
   "used_indices": number[]
 }
+
+Rules for summary:
+- CRITICAL: Write the summary in ${summaryLanguage}. The user asked in ${summaryLanguage} — always respond in the same language regardless of source languages.
+- 2–4 sentences. Focus on the most probable causes based on what the sources say.
+- If exact-date sources are unavailable, reason from the broader market context and sector dynamics described in the sources. State the reasoning is based on contextual evidence.
+- NEVER return confidence 0 or say "I cannot determine" just because sources are dated outside the event window. Always produce a best-effort analysis.
+- Do not fabricate specific prices, dates, or events not mentioned in the sources.
 
 Rules for used_indices:
 - List 1-based source numbers (e.g. [2, 5, 9]) of every source you used to write the summary.
@@ -122,13 +142,7 @@ Rules for confidence:
 - 0.25–0.49: Contextual sources (macro conditions, sector news) from outside the ±7 day window that still discuss ${assetCode} or related market dynamics.
 - 0.1–0.24 : Sources are outside the time window but discuss the asset class or broader market context that plausibly explains the move.
 
-Rules for summary:
-- 2–4 sentences. Focus on the most probable causes based on what the sources say.
-- If exact-date sources are unavailable, reason from the broader market context and sector dynamics described in the sources. State the reasoning is based on contextual evidence.
-- NEVER return confidence 0 or say "I cannot determine" just because sources are dated outside the event window. Always produce a best-effort analysis.
-- Do not fabricate specific prices, dates, or events not mentioned in the sources.
-
-User question: ${safeStr(inp?.question as string, 500)}
+User question: ${questionText}
 Event: asset=${assetCode}, date=${eventDate}, direction=${direction}
 
 Sources (numbered):
@@ -136,8 +150,15 @@ ${sourcesBlock}
 `;
   }
 
+
+
   // ── recheck ─────────────────────────────────────────────────────────────
+  const recheckEvent   = inp?.event as Record<string, unknown> | undefined;
   const recheckSources = inp?.source_priors as Record<string, unknown>[] | undefined;
+  const eventDateStr   = recheckEvent?.event_date ?? "unknown date";
+  const assetCodeStr   = recheckEvent?.asset_code  ?? "the asset";
+  const directionStr   = recheckEvent?.direction   ?? "moved";
+
   const sourcesBlock = recheckSources && recheckSources.length > 0
     ? recheckSources.map((s, i) => {
         const title   = safeStr(s?.title   ?? "", 180);
@@ -148,24 +169,53 @@ ${sourcesBlock}
       }).join("\n")
     : "No source documents available.";
 
-  return `Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
+  return `You are a skeptical financial fact-checker auditing an AI-generated market analysis.
+Your job is to find weaknesses, unsupported claims, and contradictions — NOT to confirm the analysis.
+
+Return ONLY valid JSON (no markdown, no backticks) with exactly this schema:
 {
   "summary": string,
   "confidence": number,
   "verdict": "correct" | "partial" | "wrong",
+  "reasoning": string,
   "sources": [{ "organization": string, "author_name": string }]
 }
-verdict rules:
-- "correct"  : initial summary is substantively accurate given the event and sources
-- "partial"  : initial summary has the right direction but misses key drivers
-- "wrong"    : initial summary significantly contradicts the sources or current assessment
 
-Task: Re-evaluate whether the initial analysis was accurate.
-Event: ${JSON.stringify(inp?.event ?? {})}
-Initial summary: ${safeStr(inp?.initial_summary as string, 1500)}
+Verdict rules (apply strictly):
+- "correct" : EVERY specific claim in the initial summary is directly supported by at least one source.
+              The main causal drivers are present in the sources. No material omissions.
+- "partial" : The direction (up/down) is right but at least one key driver is missing OR a claim is
+              only weakly supported (e.g. source is >14 days from ${eventDateStr}, or discusses a different asset).
+- "wrong"   : The initial summary contradicts what the sources actually say, OR it asserts specific facts
+              (prices, percentages, named events) that are absent from all sources.
+
+Confidence rules (0.0 – 1.0):
+- Start at 0.5. Add 0.25 for each source that directly mentions ${assetCodeStr} within ±7 days of ${eventDateStr}.
+- Subtract 0.2 for each specific claim in the summary that is NOT backed by any source.
+- Cap at 0.9 unless 3+ direct sources within ±3 days exist.
+
+Critical checks you MUST perform:
+1. Does the initial summary make any specific numerical claims (%, prices, dates)?  
+   If yes, are they present in the sources? If not → lean toward "wrong".
+2. Are any sources dated AFTER ${eventDateStr}?  
+   Post-event sources cannot be used as proof the initial analysis was correct — note this in reasoning.
+3. Are the sources about ${assetCodeStr} specifically, or just about the sector/macro?  
+   Sector-only sources only weakly support asset-specific claims.
+4. Does the summary attribute the move to a specific event (e.g. Fed decision, earnings beat)?  
+   Is that event explicitly mentioned in the sources? If not → "partial" or "wrong".
+
+Event being re-evaluated:
+  Asset: ${assetCodeStr}
+  Date:  ${eventDateStr}
+  Direction: ${directionStr}
+
+Initial summary under audit:
+${safeStr(inp?.initial_summary as string, 1500)}
 
 Original sources used in the analysis:
 ${sourcesBlock}
+
+Provide a brief reasoning field explaining your verdict before the final confidence score.
 `;
 }
 
@@ -244,6 +294,9 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
     // Legacy compat: some callers may still check obj.sources
     const legacySources = Array.isArray(obj.sources) ? obj.sources : [];
 
+    // recheck: include the auditor's reasoning chain and verdict
+    const reasoning = typeof obj.reasoning === "string" ? safeStr(obj.reasoning, 600) : null;
+
     const base = {
       summary: safeStr(summary, 1200),
       confidence,
@@ -258,7 +311,7 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
 
     if (task === "recheck") {
       const verdict = VALID_VERDICTS.has(obj.verdict) ? obj.verdict as Verdict : null;
-      return { ...base, verdict };
+      return { ...base, verdict, reasoning };
     }
 
     return base;
@@ -270,7 +323,7 @@ function normalizeLLM(task: Task, text: string, raw_response: string) {
       sources:      [] as unknown[],
       raw_response
     };
-    return task === "recheck" ? { ...base, verdict: null } : base;
+    return task === "recheck" ? { ...base, verdict: null, reasoning: null } : base;
   }
 }
 

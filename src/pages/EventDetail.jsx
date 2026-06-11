@@ -17,6 +17,7 @@ import { getEventById, deleteEvent } from '../services/eventService'
 import PageShell from '../components/PageShell'
 import Skeleton from '../components/Skeleton'
 import { useToast } from '../context/ToastContext'
+import { useAuth } from '../context/AuthContext'
 
 function useLocale() {
   const { i18n } = useTranslation()
@@ -43,6 +44,7 @@ function VerdictBadge({ verdict }) {
 
 function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) {
   const { t } = useTranslation()
+  const { isAdmin } = useAuth()
   const locale = useLocale()
   const [expanded, setExpanded] = useState(false)
   const revalidation = analysis.revalidations?.[0] ?? null
@@ -51,7 +53,9 @@ function AnalysisCard({ analysis, highlighted, onVerify, verifying, onDelete }) 
     .map((l) => l.source_documents)
     .filter(Boolean)
 
-  const canVerify = analysis.status === 'pending' || analysis.status === 'failed'
+  // Check Outcome is admin-only: automatic recheck runs via pg_cron after 7 days.
+  // Regular users don't need to manually trigger it.
+  const canVerify = isAdmin && (analysis.status === 'pending' || analysis.status === 'failed')
 
   return (
     <div className={`glass-panel glass-panel-hover overflow-hidden transition-shadow duration-300 ${highlighted ? 'ring-2 ring-fin-accent/50 shadow-lg shadow-fin-accent/10' : ''}`}>
