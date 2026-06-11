@@ -206,7 +206,7 @@ export default function NewEvent() {
   const limitReached = todayCount !== null && todayCount >= dailyLimit
 
   return (
-    <PageShell maxWidth="max-w-4xl" className="flex flex-col items-center">
+    <PageShell maxWidth="max-w-5xl" className="flex flex-col items-center">
       <div className="analysis-page w-full">
         {/* Hero — centered, not left-stuck */}
         <header className="analysis-hero mb-6 md:mb-8">
@@ -358,7 +358,7 @@ export default function NewEvent() {
                         key={days}
                         type="button"
                         onClick={() => set('event_date', val)}
-                        className={`min-h-[2.5rem] px-2 flex items-center justify-center rounded-lg text-xs font-semibold border transition-all duration-200 ${
+                        className={`min-h-[2.5rem] px-2 flex items-center justify-center rounded-lg text-sm font-semibold border transition-all duration-200 ${
                           form.event_date === val
                             ? 'bg-fin-accent/20 border-fin-accent text-fin-accent shadow-sm shadow-fin-accent/10'
                             : 'border-fin-border text-fin-muted hover:border-fin-muted/80 hover:text-fin-text hover:bg-fin-border/20'
