@@ -335,20 +335,20 @@ export default function NewEvent() {
           {/* 3 — Event context */}
           <section className="analysis-section">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-              <div className="md:col-span-6">
+              <div className="md:col-span-7">
                 <label className="analysis-field-label" htmlFor="analysis-date">
                   {t('newEvent.eventDate')}
                 </label>
 
-                {/* Quick-pick preset buttons */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-3">
+                {/* Quick-pick preset buttons — always single row of 6 */}
+                <div className="grid grid-cols-6 gap-1.5 mb-3">
                   {[
-                    { label: t('newEvent.dateYesterday') || 'Dün',         days: 1  },
-                    { label: t('newEvent.date1Week')     || '1 Hafta',      days: 7  },
-                    { label: t('newEvent.date1Month')    || '1 Ay',         days: 30 },
-                    { label: t('newEvent.date3Months')   || '3 Ay',         days: 90 },
-                    { label: t('newEvent.date6Months')   || '6 Ay',         days: 180 },
-                    { label: t('newEvent.date1Year')     || '1 Yıl',        days: 365 },
+                    { label: t('newEvent.dateYesterday') || 'Dün',   days: 1   },
+                    { label: t('newEvent.date1Week')     || '1H',      days: 7   },
+                    { label: t('newEvent.date1Month')    || '1A',      days: 30  },
+                    { label: t('newEvent.date3Months')   || '3A',      days: 90  },
+                    { label: t('newEvent.date6Months')   || '6A',      days: 180 },
+                    { label: t('newEvent.date1Year')     || '1Yıl',   days: 365 },
                   ].map(({ label, days }) => {
                     const d = new Date()
                     d.setDate(d.getDate() - days)
@@ -358,10 +358,10 @@ export default function NewEvent() {
                         key={days}
                         type="button"
                         onClick={() => set('event_date', val)}
-                        className={`min-h-[2.5rem] px-2 flex items-center justify-center rounded-lg text-sm font-semibold border transition-all duration-200 ${
+                        className={`h-9 w-full flex items-center justify-center rounded-lg text-xs font-semibold border transition-all duration-200 truncate px-1 ${
                           form.event_date === val
                             ? 'bg-fin-accent/20 border-fin-accent text-fin-accent shadow-sm shadow-fin-accent/10'
-                            : 'border-fin-border text-fin-muted hover:border-fin-muted/80 hover:text-fin-text hover:bg-fin-border/20'
+                            : 'border-fin-border text-fin-muted hover:border-fin-accent/50 hover:text-fin-text hover:bg-fin-accent/8'
                         }`}
                       >
                         {label}
@@ -376,7 +376,7 @@ export default function NewEvent() {
                   value={form.event_date}
                   max={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => set('event_date', e.target.value)}
-                  className="input-field w-full text-sm min-h-[2.5rem]"
+                  className="input-field w-full text-sm h-9"
                   required
                 />
 
@@ -400,16 +400,15 @@ export default function NewEvent() {
                 })()}
               </div>
 
-
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <span className="analysis-field-label block">{t('newEvent.direction')}</span>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   {['up', 'down'].map((d) => (
                     <button
                       key={d}
                       type="button"
                       onClick={() => set('direction', d)}
-                      className={`flex-1 min-h-[2.5rem] rounded-lg text-sm font-semibold border transition-all duration-200 ${
+                      className={`w-full h-9 rounded-lg text-xs font-semibold border transition-all duration-200 ${
                         form.direction === d
                           ? d === 'up'
                             ? 'bg-fin-up/20 border-fin-up text-fin-up shadow-sm shadow-fin-up/10'
@@ -437,7 +436,7 @@ export default function NewEvent() {
                   value={form.magnitude}
                   onChange={(e) => set('magnitude', e.target.value)}
                   placeholder={t('newEvent.magnitudePlaceholder')}
-                  className="input-field w-full text-sm min-h-[2.5rem]"
+                  className="input-field w-full text-sm h-9"
                 />
               </div>
             </div>

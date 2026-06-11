@@ -814,7 +814,7 @@
   /* New Analysis — centered workflow layout */
   .analysis-page {
     width: 100%;
-    max-width: 42rem;
+    max-width: 56rem;
     margin-left: auto;
     margin-right: auto;
   }

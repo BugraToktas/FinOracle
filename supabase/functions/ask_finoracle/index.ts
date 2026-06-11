@@ -539,8 +539,8 @@ Deno.serve(async (req) => {
     step = "llm_proxy_call";
 
     // Calculate how old this event is for historical context
-    const daysSinceEvent = eventDate
-      ? Math.floor((Date.now() - new Date(eventDate).getTime()) / 86_400_000)
+    const daysSinceEvent = body.event_date
+      ? Math.floor((Date.now() - new Date(body.event_date).getTime()) / 86_400_000)
       : 0;
 
     const llmPayload = {
